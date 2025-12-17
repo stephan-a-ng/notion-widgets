@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Total Soft Circled</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Custom styling for the embedded card -->
+    <style>
+        /* Use a clean, modern font */
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: transparent; /* Transparent background for Notion embed */
+            overflow: hidden; /* Prevent Notion scrollbars */
+        }
+        /* Ensure the main container is centered and uses the full width of the iframe */
+        #display-container {
+            width: 100%;
+            max-width: 48rem; /* Cap width for desktop presentation */
+        }
+    </style>
+</head>
+<body class="bg-gray-50 dark:bg-gray-100 transition-colors duration-300">
+
+    <div id="display-container" class="p-4 sm:p-6">
+        <!-- Main Card Display -->
+        <div class="bg-white dark:bg-gray-800 shadow-xl rounded-2xl p-6 md:p-8 transform hover:scale-[1.01] transition duration-300 border border-yellow-200 dark:border-yellow-700">
+            <div class="flex flex-col items-center justify-center space-y-4">
+                <h2 class="text-xs sm:text-sm font-semibold uppercase tracking-widest text-yellow-600 dark:text-yellow-400">
+                    Raise
+                </h2>
+                <!-- Display area for the amount (initial state is loading) -->
+                <div id="amountDisplay" class="text-4xl sm:text-6xl font-extrabold text-gray-900 dark:text-white transition duration-500">
+                    <div class="h-10 w-48 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+                </div>
+                <p id="lastUpdated" class="text-xs text-gray-400 dark:text-gray-500 pt-2">
+                    Fetching data...
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const API_URL = 'https://automations.moonfive.tech/webhook/46cd288e-7b82-4971-8c99-cd1fd0e18f87';
+        const MAX_RETRIES = 3;
+        const RETRY_DELAY = 1000; // 1 second
+
+        const amountDisplay = document.getElementById('amountDisplay');
+        const lastUpdated = document.getElementById('lastUpdated');
+
+        /**
+         * Fetches data with exponential backoff for resilience.
+         * @param {string} url - The API endpoint URL.
+         * @param {number} maxRetries - Maximum number of retries.
+         * @param {number} delay - Initial delay in milliseconds.
+         * @returns {Promise<any>} The parsed JSON response.
+         */
+        async function fetchWithRetry(url, maxRetries, delay) {
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    const response = await fetch(url);
+                    if (!response.ok) {
+                        // Throw error to retry on network issues or non-200 responses
+                        throw new Error(`HTTP error! Status: ${response.status}`);
+                    }
+                    return await response.json();
+                } catch (error) {
+                    if (i === maxRetries - 1) {
+                        console.error("Max retries reached. Failed to fetch data.", error);
+                        throw error;
+                    }
+                    // Exponential backoff: 1s, 2s, 4s...
+                    await new Promise(resolve => setTimeout(resolve, delay * Math.pow(2, i)));
+                    // Do not log retries as errors in the console
+                }
+            }
+        }
+
+        async function updateDollarAmount() {
+            try {
+                // 1. Fetch data from the API
+                const data = await fetchWithRetry(API_URL, MAX_RETRIES, RETRY_DELAY);
+
+                // Log raw data for debugging purposes
+                console.log("Raw API Response Data:", data);
+
+                let sumAmount;
+
+                // 2. Determine the correct value (assuming the API returns a JSON object
+                //    with a key like 'sum', 'amount', or 'total', or the number itself).
+                if (typeof data === 'number') {
+                    // Case 1: API returns the raw number (not wrapped in JSON)
+                    sumAmount = data;
+                } else if (typeof data === 'object' && data !== null) {
+                    // Case 2: API returns a JSON object. Try common keys.
+                    sumAmount = data.sum || data.amount || data.total || data.total_sum;
+                }
+
+                // FIX: If the amount is found but is a string, attempt to convert it to a float.
+                if (typeof sumAmount === 'string') {
+                    sumAmount = parseFloat(sumAmount);
+                }
+
+                // 3. Validate and display the result
+                if (typeof sumAmount === 'number' && !isNaN(sumAmount)) {
+                    const formattedAmount = new Intl.NumberFormat('en-US', {
+                        style: 'currency',
+                        currency: 'USD',
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                    }).format(sumAmount);
+
+                    amountDisplay.innerHTML = formattedAmount;
+                    lastUpdated.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
+                } else {
+                    // Handle case where API response structure is unexpected
+                    throw new Error("Invalid or missing dollar amount in API response.");
+                }
+
+            } catch (error) {
+                console.error("Failed to update display:", error);
+
+                // Display error message to the user
+                amountDisplay.innerHTML = '<span class="text-xl text-red-500">Data Load Error</span>';
+                lastUpdated.textContent = 'Could not connect to API.';
+
+                // Remove the loading pulse class
+                amountDisplay.querySelector('.animate-pulse')?.classList.remove('animate-pulse');
+            }
+        }
+
+        // Run the update function immediately and then every 60 seconds (optional)
+        window.onload = () => {
+            updateDollarAmount();
+            // Optional: Uncomment the line below to refresh the data every minute
+            // setInterval(updateDollarAmount, 60000);
+        };
+    </script>
+</body>
+</html>
