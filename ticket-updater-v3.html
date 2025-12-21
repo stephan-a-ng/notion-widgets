@@ -1,0 +1,951 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ticket Date Updater</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif; }
+
+    /* Background Animation */
+    @keyframes moveVertical {
+      0% { transform: translateY(-50%); }
+      50% { transform: translateY(50%); }
+      100% { transform: translateY(-50%); }
+    }
+    @keyframes moveInCircle {
+      0% { transform: rotate(0deg); }
+      50% { transform: rotate(180deg); }
+      100% { transform: rotate(360deg); }
+    }
+    @keyframes moveHorizontal {
+      0% { transform: translateX(-50%) translateY(-10%); }
+      50% { transform: translateX(50%) translateY(10%); }
+      100% { transform: translateX(-50%) translateY(-10%); }
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes slideInTop { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes slideInBottom { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes zoomIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+
+    .bg-container {
+      position: relative;
+      width: 100%;
+      min-height: 100vh;
+      overflow: hidden;
+      background: #f8fafc;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .bg-gradients {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      overflow: hidden;
+      opacity: 0.6;
+      pointer-events: none;
+      filter: blur(80px);
+    }
+    .blob {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      top: calc(50% - 50%);
+      left: calc(50% - 50%);
+      mix-blend-mode: multiply;
+      opacity: 0.7;
+    }
+    .blob-1 {
+      background: radial-gradient(circle at center, rgba(59,130,246,0.8) 0%, rgba(59,130,246,0) 50%);
+      animation: moveVertical 30s ease infinite;
+    }
+    .blob-2 {
+      background: radial-gradient(circle at center, rgba(168,85,247,0.8) 0%, rgba(168,85,247,0) 50%);
+      animation: moveInCircle 20s reverse infinite;
+    }
+    .blob-3 {
+      background: radial-gradient(circle at center, rgba(16,185,129,0.8) 0%, rgba(16,185,129,0) 50%);
+      animation: moveInCircle 40s linear infinite;
+    }
+    .blob-4 {
+      background: radial-gradient(circle at center, rgba(6,182,212,0.8) 0%, rgba(6,182,212,0) 50%);
+      animation: moveHorizontal 40s ease infinite;
+    }
+    .blob-interactive {
+      background: radial-gradient(circle at center, rgba(99,102,241,1) 0%, rgba(99,102,241,0) 50%);
+      top: -10%;
+      left: -10%;
+      opacity: 1;
+      will-change: transform;
+    }
+
+    .card {
+      position: relative;
+      z-index: 10;
+      width: 100%;
+      max-width: 32rem;
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(226, 232, 240, 0.6);
+      border-radius: 0.75rem;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      height: 700px;
+      transition: all 0.3s;
+      margin: 1rem;
+    }
+
+    .tabs-container {
+      border-bottom: 1px solid #f1f5f9;
+      background: rgba(248, 250, 252, 0.5);
+      padding: 0.25rem;
+      display: flex;
+      gap: 0.25rem;
+    }
+    .tab {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      padding: 0.625rem 0.75rem;
+      font-size: 0.875rem;
+      font-weight: 500;
+      border-radius: 0.5rem;
+      transition: all 0.2s;
+      cursor: pointer;
+      border: none;
+      background: transparent;
+      color: #64748b;
+    }
+    .tab:hover { background: rgba(241, 245, 249, 0.5); color: #334155; }
+    .tab.active {
+      background: white;
+      color: #1a202c;
+      box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+      border: 1px solid rgba(226, 232, 240, 0.6);
+    }
+    .tab-icon-blue { color: #3b82f6; }
+    .tab-icon-emerald { color: #10b981; }
+    .tab-icon-purple { color: #a855f7; }
+
+    .content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1.5rem;
+    }
+    .content::-webkit-scrollbar { width: 6px; }
+    .content::-webkit-scrollbar-track { background: transparent; }
+    .content::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1.5rem;
+    }
+    .header h2 {
+      font-size: 1.125rem;
+      font-weight: 600;
+      color: #1e293b;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .refresh-btn {
+      padding: 0.5rem;
+      color: #94a3b8;
+      background: transparent;
+      border: none;
+      border-radius: 9999px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .refresh-btn:hover { background: #f1f5f9; color: #475569; }
+    .refresh-btn:disabled { cursor: not-allowed; }
+
+    .error-box {
+      margin-bottom: 1.5rem;
+      padding: 1rem;
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      color: #dc2626;
+      font-size: 0.875rem;
+      border-radius: 0.5rem;
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+    }
+    .error-box svg { margin-top: 0.125rem; flex-shrink: 0; }
+    .error-title { font-weight: 600; }
+
+    .loading {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 1.25rem;
+      color: #94a3b8;
+    }
+    .loading svg { margin-bottom: 0.75rem; opacity: 0.5; }
+    .animate-spin { animation: spin 1s linear infinite; }
+
+    form { display: flex; flex-direction: column; gap: 1.25rem; }
+
+    .form-group { display: flex; flex-direction: column; gap: 0.375rem; }
+    label {
+      display: block;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.025em;
+    }
+
+    select, input, textarea {
+      width: 100%;
+      appearance: none;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      color: #334155;
+      font-size: 0.875rem;
+      border-radius: 0.5rem;
+      padding: 0.75rem;
+      transition: all 0.2s;
+    }
+    select { cursor: pointer; padding-right: 2rem; }
+    select:focus, input:focus, textarea:focus {
+      outline: none;
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+    select:disabled { cursor: not-allowed; opacity: 0.6; }
+    textarea { resize: none; font-family: inherit; }
+
+    .select-wrapper {
+      position: relative;
+    }
+    .select-arrow {
+      position: absolute;
+      right: 0.75rem;
+      top: 50%;
+      transform: translateY(-50%) rotate(90deg);
+      color: #94a3b8;
+      pointer-events: none;
+    }
+
+    .ticket-preview {
+      padding: 0.75rem;
+      background: rgba(248, 250, 252, 0.5);
+      border-radius: 0.5rem;
+      border: 1px solid #f1f5f9;
+      font-size: 0.875rem;
+      animation: slideInTop 0.3s ease-out;
+    }
+    .preview-label {
+      display: block;
+      font-size: 0.75rem;
+      color: #94a3b8;
+      margin-bottom: 0.125rem;
+    }
+    .preview-value {
+      font-weight: 500;
+      color: #475569;
+    }
+    .preview-divider {
+      margin-top: 0.75rem;
+      padding-top: 0.75rem;
+      border-top: 1px solid rgba(241, 245, 249, 0.6);
+    }
+    .preview-desc {
+      color: #475569;
+      font-size: 0.75rem;
+      line-height: 1.5;
+      max-height: 6rem;
+      overflow-y: auto;
+      padding-right: 0.5rem;
+    }
+    .preview-desc::-webkit-scrollbar { width: 4px; }
+    .preview-desc::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 2px; }
+    .preview-empty { color: #cbd5e1; font-style: italic; font-size: 0.75rem; }
+
+    /* Date Picker */
+    .date-picker-wrapper { position: relative; }
+    .date-input {
+      width: 100%;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      color: #334155;
+      font-size: 0.875rem;
+      border-radius: 0.5rem;
+      padding: 0.625rem 0.625rem 0.625rem 2.5rem;
+      display: flex;
+      align-items: center;
+      cursor: pointer;
+      user-select: none;
+      transition: all 0.2s;
+    }
+    .date-input:hover { background: #f1f5f9; }
+    .date-input.error {
+      border-color: #fca5a5;
+      box-shadow: 0 0 0 2px #fee2e2;
+    }
+    .date-icon {
+      position: absolute;
+      left: 0.75rem;
+      top: 50%;
+      transform: translateY(-50%);
+      pointer-events: none;
+    }
+    .date-placeholder { color: #94a3b8; }
+    .date-value { font-weight: 500; }
+
+    .date-dropdown {
+      position: absolute;
+      z-index: 10;
+      margin-top: 0.25rem;
+      width: 100%;
+      background: white;
+      border-radius: 0.5rem;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+      border: 1px solid #e2e8f0;
+      padding: 1rem;
+      animation: zoomIn 0.2s ease-out;
+    }
+    .date-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+    .month-btn {
+      padding: 0.25rem;
+      background: transparent;
+      border: none;
+      border-radius: 9999px;
+      color: #64748b;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .month-btn:hover { background: #f1f5f9; }
+    .month-label {
+      font-weight: 600;
+      color: #334155;
+    }
+    .days-header {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 0.25rem;
+      margin-bottom: 0.5rem;
+    }
+    .day-name {
+      text-align: center;
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: #94a3b8;
+    }
+    .days-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 0.25rem;
+    }
+    .day-btn {
+      height: 2rem;
+      width: 2rem;
+      border-radius: 9999px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      font-weight: 500;
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s;
+      color: #475569;
+      background: transparent;
+    }
+    .day-btn:hover { background: #f1f5f9; }
+    .day-btn.selected {
+      background: #1e293b;
+      color: white;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+      transform: scale(1.05);
+    }
+    .day-btn.today {
+      color: #2563eb;
+      background: #dbeafe;
+      font-weight: 700;
+    }
+
+    .error-msg {
+      font-size: 0.75rem;
+      color: #ef4444;
+      margin-top: 0.25rem;
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+      animation: slideInTop 0.2s ease-out;
+    }
+
+    .textarea-wrapper { position: relative; }
+    .textarea-icon {
+      position: absolute;
+      top: 0.75rem;
+      left: 0.75rem;
+      pointer-events: none;
+      color: #94a3b8;
+    }
+    textarea.with-icon { padding-left: 2.5rem; }
+
+    .submit-btn {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      color: white;
+      font-weight: 500;
+      border-radius: 0.5rem;
+      font-size: 0.875rem;
+      padding: 0.75rem 1.25rem;
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: #1e293b;
+      animation: zoomIn 0.3s ease-out;
+    }
+    .submit-btn:hover {
+      background: #0f172a;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+      transform: translateY(-1px);
+    }
+    .submit-btn:disabled {
+      background: #cbd5e0;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .success-msg {
+      margin-top: 1rem;
+      padding: 1rem;
+      background: #f0fdf4;
+      border: 1px solid #86efac;
+      color: #15803d;
+      font-size: 0.875rem;
+      border-radius: 0.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      animation: slideInBottom 0.3s ease-out;
+    }
+
+    .footer {
+      background: rgba(248, 250, 252, 0.5);
+      padding: 0.75rem;
+      text-align: center;
+      border-top: 1px solid #f1f5f9;
+    }
+    .footer p {
+      font-size: 0.625rem;
+      color: #94a3b8;
+      font-weight: 500;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script>
+    const { useState, useEffect, useRef, createElement: h } = React;
+
+    const APP_CONFIG = {
+      webhooks: {
+        prototyping: {
+          url: 'https://automations.moonfive.tech/webhook/4788b7df-8d94-4938-a29c-ec939884fb6b',
+          label: 'Prototyping',
+          color: 'blue'
+        },
+        production: {
+          url: 'https://automations.moonfive.tech/webhook/ae3bc892-15e4-4643-ba96-279f6e1f0197',
+          label: 'Production',
+          color: 'emerald'
+        },
+        certification: {
+          url: 'https://automations.moonfive.tech/webhook/a73bd4e7-407f-4dda-b9f6-2d6285a8b37e',
+          label: 'Certification',
+          color: 'purple'
+        }
+      },
+      postUrl: 'https://automations.moonfive.tech/webhook/c4279ca4-5c31-495a-a518-500e308d0932'
+    };
+
+    // SVG Icons
+    const Icons = {
+      RefreshCw: ({ size = 24, className = '' }) => h('svg', { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', className },
+        h('polyline', { points: '23 4 23 10 17 10' }),
+        h('polyline', { points: '1 20 1 14 7 14' }),
+        h('path', { d: 'M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15' })
+      ),
+      Check: ({ size = 24, className = '' }) => h('svg', { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', className },
+        h('polyline', { points: '20 6 9 17 4 12' })
+      ),
+      AlertCircle: ({ size = 24, className = '' }) => h('svg', { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', className },
+        h('circle', { cx: 12, cy: 12, r: 10 }),
+        h('line', { x1: 12, y1: 8, x2: 12, y2: 12 }),
+        h('line', { x1: 12, y1: 16, x2: 12.01, y2: 16 })
+      ),
+      Calendar: ({ size = 24, className = '' }) => h('svg', { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', className },
+        h('rect', { x: 3, y: 4, width: 18, height: 18, rx: 2, ry: 2 }),
+        h('line', { x1: 16, y1: 2, x2: 16, y2: 6 }),
+        h('line', { x1: 8, y1: 2, x2: 8, y2: 6 }),
+        h('line', { x1: 3, y1: 10, x2: 21, y2: 10 })
+      ),
+      FileText: ({ size = 24, className = '' }) => h('svg', { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', className },
+        h('path', { d: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z' }),
+        h('polyline', { points: '14 2 14 8 20 8' }),
+        h('line', { x1: 16, y1: 13, x2: 8, y2: 13 }),
+        h('line', { x1: 16, y1: 17, x2: 8, y2: 17 }),
+        h('polyline', { points: '10 9 9 9 8 9' })
+      ),
+      Send: ({ size = 24, className = '' }) => h('svg', { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', className },
+        h('line', { x1: 22, y1: 2, x2: 11, y2: 13 }),
+        h('polygon', { points: '22 2 15 22 11 13 2 9 22 2' })
+      ),
+      Box: ({ size = 24, className = '' }) => h('svg', { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', className },
+        h('path', { d: 'M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z' }),
+        h('polyline', { points: '3.27 6.96 12 12.01 20.73 6.96' }),
+        h('line', { x1: 12, y1: 22.08, x2: 12, y2: 12 })
+      ),
+      Layers: ({ size = 24, className = '' }) => h('svg', { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', className },
+        h('polygon', { points: '12 2 2 7 12 12 22 7 12 2' }),
+        h('polyline', { points: '2 17 12 22 22 17' }),
+        h('polyline', { points: '2 12 12 17 22 12' })
+      ),
+      Award: ({ size = 24, className = '' }) => h('svg', { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', className },
+        h('circle', { cx: 12, cy: 8, r: 7 }),
+        h('polyline', { points: '8.21 13.89 7 23 12 20 17 23 15.79 13.88' })
+      ),
+      ChevronLeft: ({ size = 24, className = '' }) => h('svg', { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', className },
+        h('polyline', { points: '15 18 9 12 15 6' })
+      ),
+      ChevronRight: ({ size = 24, className = '' }) => h('svg', { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', className },
+        h('polyline', { points: '9 18 15 12 9 6' })
+      )
+    };
+
+    // Background Animation Component
+    function BackgroundGradientAnimation({ children }) {
+      const interactiveRef = useRef(null);
+      const curX = useRef(0);
+      const curY = useRef(0);
+      const tgX = useRef(0);
+      const tgY = useRef(0);
+
+      useEffect(() => {
+        tgX.current = window.innerWidth / 2;
+        tgY.current = window.innerHeight / 2;
+        curX.current = window.innerWidth / 2;
+        curY.current = window.innerHeight / 2;
+
+        const handleMouseMove = (event) => {
+          if (interactiveRef.current) {
+            const rect = interactiveRef.current.parentElement.getBoundingClientRect();
+            tgX.current = event.clientX - rect.left;
+            tgY.current = event.clientY - rect.top;
+          }
+        };
+
+        window.addEventListener('mousemove', handleMouseMove);
+        return () => window.removeEventListener('mousemove', handleMouseMove);
+      }, []);
+
+      useEffect(() => {
+        let animationFrameId;
+        const move = () => {
+          if (interactiveRef.current) {
+            curX.current += (tgX.current - curX.current) / 20;
+            curY.current += (tgY.current - curY.current) / 20;
+            interactiveRef.current.style.transform = `translate(${Math.round(curX.current - window.innerWidth / 2)}px, ${Math.round(curY.current - window.innerHeight / 2)}px)`;
+          }
+          animationFrameId = requestAnimationFrame(move);
+        };
+        move();
+        return () => cancelAnimationFrame(animationFrameId);
+      }, []);
+
+      return h('div', { className: 'bg-container' },
+        h('div', { className: 'bg-gradients' },
+          h('div', { className: 'blob blob-1' }),
+          h('div', { className: 'blob blob-2' }),
+          h('div', { className: 'blob blob-3' }),
+          h('div', { className: 'blob blob-4' }),
+          h('div', { className: 'blob blob-interactive', ref: interactiveRef })
+        ),
+        children
+      );
+    }
+
+    // Date Picker Component
+    function CustomDatePicker({ value, onChange, error }) {
+      const [isOpen, setIsOpen] = useState(false);
+      const [currentDate, setCurrentDate] = useState(new Date());
+      const wrapperRef = useRef(null);
+
+      useEffect(() => {
+        if (value) {
+          const [y, m, d] = value.split('-').map(Number);
+          setCurrentDate(new Date(y, m - 1, d));
+        }
+
+        const handleClickOutside = (event) => {
+          if (wrapperRef.current && !wrapperRef.current.contains(event.target)) {
+            setIsOpen(false);
+          }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+      }, [value]);
+
+      const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+      const daysShort = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+
+      const year = currentDate.getFullYear();
+      const month = currentDate.getMonth();
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      const firstDay = new Date(year, month, 1).getDay();
+
+      const handleDateClick = (day) => {
+        const formattedMonth = String(month + 1).padStart(2, '0');
+        const formattedDay = String(day).padStart(2, '0');
+        onChange(`${year}-${formattedMonth}-${formattedDay}`);
+        setIsOpen(false);
+      };
+
+      const changeMonth = (offset) => {
+        setCurrentDate(new Date(year, month + offset, 1));
+      };
+
+      return h('div', { className: 'date-picker-wrapper', ref: wrapperRef },
+        h('div', {
+          className: 'date-input' + (error ? ' error' : ''),
+          onClick: () => setIsOpen(!isOpen)
+        },
+          h('div', { className: 'date-icon' },
+            h(Icons.Calendar, { size: 16, className: error ? 'text-red-400' : 'text-slate-400' })
+          ),
+          value
+            ? h('span', { className: 'date-value' }, value)
+            : h('span', { className: 'date-placeholder' }, 'Select a date...')
+        ),
+        isOpen && h('div', { className: 'date-dropdown' },
+          h('div', { className: 'date-header' },
+            h('button', { className: 'month-btn', onClick: () => changeMonth(-1), type: 'button' },
+              h(Icons.ChevronLeft, { size: 18 })
+            ),
+            h('span', { className: 'month-label' }, `${months[month]} ${year}`),
+            h('button', { className: 'month-btn', onClick: () => changeMonth(1), type: 'button' },
+              h(Icons.ChevronRight, { size: 18 })
+            )
+          ),
+          h('div', { className: 'days-header' },
+            ...daysShort.map(d => h('div', { key: d, className: 'day-name' }, d))
+          ),
+          h('div', { className: 'days-grid' },
+            ...Array.from({ length: firstDay }).map((_, i) => h('div', { key: `empty-${i}` })),
+            ...Array.from({ length: daysInMonth }).map((_, i) => {
+              const day = i + 1;
+              const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+              const isSelected = value === dateStr;
+              const isToday = new Date().toDateString() === new Date(year, month, day).toDateString();
+              let className = 'day-btn';
+              if (isSelected) className += ' selected';
+              else if (isToday) className += ' today';
+
+              return h('button', {
+                key: day,
+                type: 'button',
+                onClick: () => handleDateClick(day),
+                className
+              }, day);
+            })
+          )
+        )
+      );
+    }
+
+    // Main App
+    function App() {
+      const [activeTab, setActiveTab] = useState('prototyping');
+      const [tickets, setTickets] = useState([]);
+      const [loading, setLoading] = useState(false);
+      const [error, setError] = useState(null);
+      const [selectedTicketId, setSelectedTicketId] = useState('');
+      const [newDate, setNewDate] = useState('');
+      const [reason, setReason] = useState('');
+      const [submissionStatus, setSubmissionStatus] = useState('idle');
+      const [submissionMessage, setSubmissionMessage] = useState('');
+
+      useEffect(() => {
+        fetchTickets(activeTab);
+      }, [activeTab]);
+
+      const fetchTickets = async (tabKey) => {
+        setLoading(true);
+        setError(null);
+        setTickets([]);
+        setSelectedTicketId('');
+
+        try {
+          const response = await fetch(APP_CONFIG.webhooks[tabKey].url, {
+            method: 'GET',
+            headers: { 'Accept': 'application/json' }
+          });
+
+          if (!response.ok) throw new Error(`Status: ${response.status}`);
+          const data = await response.json();
+
+          let processedTickets = [];
+          if (Array.isArray(data)) {
+            processedTickets = data;
+          } else if (data && typeof data === 'object') {
+            const possibleArray = data.data || data.items || data.tickets || data.records;
+            processedTickets = Array.isArray(possibleArray) ? possibleArray : [data];
+          }
+
+          setTickets(processedTickets);
+        } catch (err) {
+          console.error("Fetch error:", err);
+          setError(`Failed to load tickets. ${err.message}`);
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      const getTicketLabel = (t) => t.name || t.Name || t.title || t.Title || t.subject || t.id || 'Ticket';
+      const getTicketId = (t) => t.id || t.ticketId || t._id;
+      const getTicketDate = (t) => {
+        if (!t) return null;
+        if (t.property_date) {
+          const { start, end } = t.property_date;
+          if (start && end) return `${start} to ${end}`;
+          return start || end;
+        }
+        return t.date || t.Date || t.due_date || t.dueDate || t.properties?.Date?.date?.start || null;
+      };
+      const getTicketEndDate = (t) => {
+        if (!t) return null;
+        if (t.property_date) return t.property_date.end || t.property_date.start;
+        const notionDate = t.properties?.Date?.date;
+        if (notionDate) return notionDate.end || notionDate.start;
+        return t.date || t.Date || t.due_date || t.dueDate || null;
+      };
+      const getTicketDescription = (t) => {
+        if (!t) return null;
+        return t.property_description || t.description || t.Description || t.properties?.Description?.rich_text?.[0]?.plain_text || null;
+      };
+
+      const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (!selectedTicketId || !newDate || !reason) return;
+
+        setSubmissionStatus('submitting');
+        setSubmissionMessage('');
+
+        const ticket = tickets.find(t => getTicketId(t) === selectedTicketId);
+        const initialDate = ticket ? (getTicketDate(ticket) || 'N/A') : 'N/A';
+
+        try {
+          const response = await fetch(APP_CONFIG.postUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: selectedTicketId,
+              initialDate,
+              newDate,
+              reason,
+              environment: activeTab
+            })
+          });
+
+          if (response.ok) {
+            setSubmissionStatus('success');
+            setSubmissionMessage('Update submitted successfully.');
+            setReason('');
+            setNewDate('');
+            setSelectedTicketId('');
+            setTimeout(() => {
+              setSubmissionStatus('idle');
+              setSubmissionMessage('');
+            }, 3000);
+          } else {
+            throw new Error(`Server responded with ${response.status}`);
+          }
+        } catch (err) {
+          console.error("Post error:", err);
+          setSubmissionStatus('error');
+          setSubmissionMessage(`Submission failed: ${err.message}.`);
+        }
+      };
+
+      const currentTicket = tickets.find(t => getTicketId(t) === selectedTicketId);
+      const currentDescription = getTicketDescription(currentTicket);
+      const currentEndDate = getTicketEndDate(currentTicket);
+      const isDateValid = !newDate || !currentEndDate || new Date(newDate) > new Date(currentEndDate);
+      const isFormValid = selectedTicketId && newDate && reason.trim().length > 0 && isDateValid;
+
+      const TabIcon = activeTab === 'prototyping' ? Icons.Box : activeTab === 'production' ? Icons.Layers : Icons.Award;
+      const iconClass = activeTab === 'prototyping' ? 'tab-icon-blue' : activeTab === 'production' ? 'tab-icon-emerald' : 'tab-icon-purple';
+
+      return h(BackgroundGradientAnimation, null,
+        h('div', { className: 'card' },
+          h('div', { className: 'tabs-container' },
+            ...Object.entries(APP_CONFIG.webhooks).map(([key, config]) => {
+              const isActive = activeTab === key;
+              const TabIconComp = key === 'prototyping' ? Icons.Box : key === 'production' ? Icons.Layers : Icons.Award;
+              const tabIconClass = key === 'prototyping' ? 'tab-icon-blue' : key === 'production' ? 'tab-icon-emerald' : 'tab-icon-purple';
+
+              return h('button', {
+                key,
+                className: 'tab' + (isActive ? ' active' : ''),
+                onClick: () => setActiveTab(key)
+              },
+                h(TabIconComp, { size: 16, className: isActive ? tabIconClass : '' }),
+                h('span', null, config.label)
+              );
+            })
+          ),
+
+          h('div', { className: 'content' },
+            h('div', { className: 'header' },
+              h('h2', null,
+                h(TabIcon, { size: 20, className: iconClass }),
+                'Update Ticket'
+              ),
+              h('button', {
+                className: 'refresh-btn',
+                onClick: () => fetchTickets(activeTab),
+                disabled: loading,
+                title: 'Refresh Tickets'
+              }, h(Icons.RefreshCw, { size: 16, className: loading ? 'animate-spin' : '' }))
+            ),
+
+            error && h('div', { className: 'error-box' },
+              h(Icons.AlertCircle, { size: 18 }),
+              h('div', null,
+                h('div', { className: 'error-title' }, 'Connection Error'),
+                h('div', null, error)
+              )
+            ),
+
+            loading && tickets.length === 0
+              ? h('div', { className: 'loading' },
+                  h(Icons.RefreshCw, { size: 32, className: 'animate-spin' }),
+                  h('p', null, 'Fetching tickets...')
+                )
+              : h('form', { onSubmit: handleSubmit },
+                  h('div', { className: 'form-group' },
+                    h('label', null, 'Select Ticket'),
+                    h('div', { className: 'select-wrapper' },
+                      h('select', {
+                        value: selectedTicketId,
+                        onChange: (e) => setSelectedTicketId(e.target.value),
+                        disabled: tickets.length === 0
+                      },
+                        h('option', { value: '' }, '-- Choose a ticket --'),
+                        ...tickets.map((t, idx) => {
+                          const id = getTicketId(t) || `idx-${idx}`;
+                          const label = getTicketLabel(t);
+                          return h('option', { key: id, value: id }, label);
+                        })
+                      ),
+                      h('div', { className: 'select-arrow' }, h(Icons.ChevronRight, { size: 16 }))
+                    ),
+                    tickets.length === 0 && !loading && !error && h('p', { style: { fontSize: '0.75rem', color: '#f59e0b', marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.25rem' } },
+                      h(Icons.AlertCircle, { size: 12 }),
+                      'No tickets found in this environment.'
+                    )
+                  ),
+
+                  selectedTicketId && h('div', { className: 'ticket-preview' },
+                    h('div', null,
+                      h('span', { className: 'preview-label' }, 'Due on'),
+                      h('span', { className: 'preview-value' }, getTicketDate(currentTicket) || 'Not set')
+                    ),
+                    h('div', { className: 'preview-divider' },
+                      h('span', { className: 'preview-label' }, 'Description'),
+                      currentDescription
+                        ? h('div', { className: 'preview-desc' }, currentDescription)
+                        : h('span', { className: 'preview-empty' }, 'No description available')
+                    )
+                  ),
+
+                  h('div', { className: 'form-group' },
+                    h('label', null, 'New Target Date'),
+                    h(CustomDatePicker, { value: newDate, onChange: setNewDate, error: !isDateValid }),
+                    !isDateValid && newDate && currentEndDate && h('div', { className: 'error-msg' },
+                      h(Icons.AlertCircle, { size: 12 }),
+                      `Date must be after ${currentEndDate}`
+                    )
+                  ),
+
+                  h('div', { className: 'form-group' },
+                    h('label', null, 'Change Reason'),
+                    h('div', { className: 'textarea-wrapper' },
+                      h('div', { className: 'textarea-icon' }, h(Icons.FileText, { size: 16 })),
+                      h('textarea', {
+                        value: reason,
+                        onChange: (e) => setReason(e.target.value),
+                        rows: 4,
+                        className: 'with-icon',
+                        placeholder: 'Why is this date changing?',
+                        required: true
+                      })
+                    )
+                  ),
+
+                  isFormValid && h('button', {
+                    type: 'submit',
+                    disabled: submissionStatus === 'submitting',
+                    className: 'submit-btn'
+                  },
+                    submissionStatus === 'submitting'
+                      ? [h(Icons.RefreshCw, { key: 'icon', size: 18, className: 'animate-spin' }), 'Updating...']
+                      : [h(Icons.Send, { key: 'icon', size: 18 }), 'Submit Update']
+                  )
+                ),
+
+            submissionStatus === 'success' && h('div', { className: 'success-msg' },
+              h(Icons.Check, { size: 18 }),
+              submissionMessage
+            ),
+
+            submissionStatus === 'error' && h('div', { className: 'error-box', style: { marginTop: '1rem' } },
+              h(Icons.AlertCircle, { size: 18 }),
+              h('div', null, submissionMessage)
+            )
+          ),
+
+          h('div', { className: 'footer' },
+            h('p', null, 'Connected to Moonfive Automations')
+          )
+        )
+      );
+    }
+
+    console.log('Starting app...');
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(h(App));
+    console.log('App rendered successfully!');
+  </script>
+</body>
+</html>

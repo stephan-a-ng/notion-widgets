@@ -29,6 +29,28 @@ Interactive location search widget with Google Maps integration.
 
 **Live URL:** https://storage.googleapis.com/moonfive-website-bucket/location-picker.html
 
+### 3. Ticket Date Updater (`ticket-updater-v3.html`)
+Interactive ticket management widget for updating target dates across different environments.
+
+**Features:**
+- Multi-environment support (Prototyping, Production, Certification)
+- Dynamic ticket fetching from webhook endpoints
+- Custom calendar date picker with month navigation
+- Aceternity-style animated gradient background that responds to mouse movement
+- Form validation ensuring new dates are after current dates
+- Webhook integration for date update submissions
+- Real-time feedback with success/error states
+- Ticket preview with description display
+- Built with React (vanilla JS - no JSX/Babel) and inline CSS (no Tailwind)
+- Inline SVG icons (no external icon dependencies)
+
+**Live URL:** https://storage.googleapis.com/moonfive-website-bucket/ticket-updater-v3.html
+
+**Version History:**
+- `v3`: Production version with animated background, custom date picker, no external CSS frameworks
+- `v2`: Simplified version with basic styling
+- `v1`: Initial version (deprecated due to Tailwind CSS conflicts)
+
 ## Deployment
 
 All widgets are hosted on Google Cloud Storage bucket: `moonfive-website-bucket`
