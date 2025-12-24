@@ -52,9 +52,9 @@ export function useThreads() {
 
     setIsLoading(true);
     try {
-      // Fetch all records, sorted by created time descending
+      // Fetch all records (Airtable returns in creation order by default)
       const response = await fetch(
-        `${AIRTABLE_API_URL}?sort[0][field]=Created&sort[0][direction]=desc&maxRecords=50`,
+        `${AIRTABLE_API_URL}?maxRecords=50`,
         {
           headers: {
             'Authorization': `Bearer ${AIRTABLE_TOKEN}`
@@ -100,7 +100,8 @@ export function useThreads() {
               status: fields['Job Status'] || fields['Status'] || 'Done'
             };
           })
-          .filter(thread => thread.requestText || thread.responseText); // Only include threads with some content
+          .filter(thread => thread.requestText || thread.responseText) // Only include threads with some content
+          .sort((a, b) => b.createdAt - a.createdAt); // Sort by newest first
 
         console.log('Parsed threads:', threadList);
         setThreads(threadList);
