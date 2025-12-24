@@ -1,7 +1,7 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { THEMES, DEFAULT_THEME } from './config/themes';
 import { PENDING_SUBMIT_DELAY_MS, PREFETCH_DELAY_MS } from './config/constants';
-import { addPunctuation } from './utils/transcriptFormatter';
+import { addPunctuation, isIncompleteSentence } from './utils/transcriptFormatter';
 import {
   useScrollCompact,
   useAudioDevices,
@@ -19,6 +19,30 @@ import {
   EditModal
 } from './components';
 
+const STORAGE_KEY = 'voice-interface-preferences';
+
+// Load preferences from localStorage
+function loadPreferences() {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      return JSON.parse(stored);
+    }
+  } catch (e) {
+    console.error('Failed to load preferences:', e);
+  }
+  return null;
+}
+
+// Save preferences to localStorage
+function savePreferences(prefs) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(prefs));
+  } catch (e) {
+    console.error('Failed to save preferences:', e);
+  }
+}
+
 export default function App() {
   // Mode: 'idle' | 'listening' | 'pending' | 'editing'
   const [mode, setMode] = useState('idle');
@@ -26,8 +50,15 @@ export default function App() {
   const [editText, setEditText] = useState('');
   const [apiError, setApiError] = useState(false);
 
-  // UI State
-  const [currentTheme, setCurrentTheme] = useState(DEFAULT_THEME);
+  // UI State - load theme from localStorage
+  const [currentTheme, setCurrentTheme] = useState(() => {
+    const prefs = loadPreferences();
+    if (prefs?.theme) {
+      const savedTheme = THEMES.find(t => t.name === prefs.theme);
+      if (savedTheme) return savedTheme;
+    }
+    return DEFAULT_THEME;
+  });
   const [showThemeSelector, setShowThemeSelector] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
@@ -98,7 +129,14 @@ export default function App() {
 
   // Handle session end (called by speech recognition)
   const handleSessionEnd = useCallback((transcript, interimTranscript) => {
-    let fullText = transcript + (interimTranscript ? ' ' + interimTranscript : '');
+    // Only include interim transcript if it's a complete sentence
+    // This filters out stutters/incomplete fragments
+    let textToAppend = '';
+    if (interimTranscript && !isIncompleteSentence(interimTranscript)) {
+      textToAppend = ' ' + interimTranscript;
+    }
+
+    let fullText = transcript + textToAppend;
     fullText = fullText.replace(/\s+/g, ' ').trim();
 
     if (!fullText) {
@@ -169,6 +207,7 @@ export default function App() {
 
   const selectTheme = useCallback((theme) => {
     setCurrentTheme(theme);
+    savePreferences({ theme: theme.name });
     setShowThemeSelector(false);
     setIsSettingsOpen(false);
   }, []);
