@@ -9,7 +9,8 @@ import {
   useSpeechRecognition,
   useAudioOutput,
   useKeyboardControls,
-  useThreads
+  useThreads,
+  useUsageData
 } from './hooks';
 import {
   Header,
@@ -18,7 +19,8 @@ import {
   TranscriptDisplay,
   ThreadHistory,
   ThreadBrowser,
-  EditModal
+  EditModal,
+  UsageIndicator
 } from './components';
 
 const STORAGE_KEY = 'voice-interface-preferences';
@@ -86,6 +88,7 @@ export default function App() {
   const { isLocked, unlockStatus, lockoutCountdown, attemptUnlock, isInputBlocked } = useLockout();
   const isCompact = useScrollCompact(isLocked);
   const { audioDevices, selectedDeviceId, getAudioDevices, handleDeviceChange } = useAudioDevices();
+  const usageData = useUsageData();
 
   const triggerErrorAnimation = useCallback(() => {
     setApiError(true);
@@ -256,18 +259,27 @@ export default function App() {
         />
       </div>
 
-      {/* Settings Button (Hidden when locked) */}
+      {/* Settings Button and Usage Indicator (Hidden when locked) */}
       {!isLocked && (
-        <SettingsPanel
-          isOpen={isSettingsOpen && !showThemeSelector}
-          onToggle={() => setIsSettingsOpen(!isSettingsOpen)}
-          onClose={() => setIsSettingsOpen(false)}
-          currentTheme={currentTheme}
-          onThemeClick={() => setShowThemeSelector(true)}
-          audioDevices={audioDevices}
-          selectedDeviceId={selectedDeviceId}
-          onDeviceChange={handleDeviceChange}
-        />
+        <div className="fixed top-6 right-6 z-[60] flex flex-col items-center gap-3">
+          <SettingsPanel
+            isOpen={isSettingsOpen && !showThemeSelector}
+            onToggle={() => setIsSettingsOpen(!isSettingsOpen)}
+            onClose={() => setIsSettingsOpen(false)}
+            currentTheme={currentTheme}
+            onThemeClick={() => setShowThemeSelector(true)}
+            audioDevices={audioDevices}
+            selectedDeviceId={selectedDeviceId}
+            onDeviceChange={handleDeviceChange}
+          />
+          <UsageIndicator
+            percentage={usageData.percentage}
+            refreshEpoch={usageData.refreshEpoch}
+            history={usageData.history}
+            healthStatus={usageData.healthStatus}
+            isLoading={usageData.isLoading}
+          />
+        </div>
       )}
 
       {/* Full Screen Theme Selector */}

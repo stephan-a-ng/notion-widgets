@@ -25,7 +25,7 @@ export function SettingsPanel({
   }, [onClose]);
 
   return (
-    <div className="fixed top-6 right-6 z-[60]" ref={settingsRef}>
+    <div className="relative" ref={settingsRef}>
       <button
         onClick={onToggle}
         className="p-3 bg-white/5 hover:bg-white/10 rounded-full text-zinc-400 hover:text-white transition-colors backdrop-blur-sm"
