@@ -1,0 +1,560 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { Mic, MicOff, MessageSquare, Send, Trash2, CornerDownLeft, Settings, Check, X } from 'lucide-react';
+
+export default function App() {
+  // Modes: 'idle' | 'listening' | 'pending' | 'editing'
+  const [mode, setMode] = useState('idle');
+  const [transcript, setTranscript] = useState('');
+  const [interimTranscript, setInterimTranscript] = useState('');
+  const [messages, setMessages] = useState([]);
+  const [permissionError, setPermissionError] = useState(false);
+  const [isSupported, setIsSupported] = useState(true);
+  
+  // UI State
+  const [isCompact, setIsCompact] = useState(false);
+  
+  // Settings & Devices
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [audioDevices, setAudioDevices] = useState([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState('');
+  
+  // For Editing Mode
+  const [editText, setEditText] = useState('');
+  
+  // Refs
+  const recognitionRef = useRef(null);
+  const silenceTimerRef = useRef(null);
+  const pendingSubmitTimerRef = useRef(null);
+  const textareaRef = useRef(null);
+  const settingsRef = useRef(null); 
+  
+  // State Refs
+  const transcriptRef = useRef('');
+  const interimTranscriptRef = useRef('');
+  const modeRef = useRef('idle');
+
+  // Sync Refs
+  useEffect(() => { transcriptRef.current = transcript; }, [transcript]);
+  useEffect(() => { interimTranscriptRef.current = interimTranscript; }, [interimTranscript]);
+  useEffect(() => { modeRef.current = mode; }, [mode]);
+
+  // Scroll Listener
+  useEffect(() => {
+    const handleScroll = () => {
+      if (!isCompact && window.scrollY > 20) {
+        setIsCompact(true);
+      } else if (isCompact && window.scrollY < 10) {
+        setIsCompact(false);
+      }
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [isCompact]);
+
+  // Audio Devices
+  const getAudioDevices = async () => {
+    try {
+      await navigator.mediaDevices.getUserMedia({ audio: true });
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const audioInputs = devices.filter(device => device.kind === 'audioinput');
+      setAudioDevices(audioInputs);
+      
+      if (audioInputs.length > 0 && !selectedDeviceId) {
+        const defaultDevice = audioInputs.find(d => d.deviceId === 'default') || audioInputs[0];
+        setSelectedDeviceId(defaultDevice.deviceId);
+      }
+    } catch (err) {
+      console.error("Error fetching devices:", err);
+    }
+  };
+
+  // Initialize Speech Recognition
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      
+      if (SpeechRecognition) {
+        const recognition = new SpeechRecognition();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = 'en-US';
+
+        recognition.onstart = () => {
+          setPermissionError(false);
+          setMode('listening');
+        };
+
+        recognition.onerror = (event) => {
+          if (event.error === 'no-speech') return;
+          console.error("Speech error", event.error);
+          if (event.error === 'not-allowed') {
+            setPermissionError(true);
+            setMode('idle');
+          }
+        };
+
+        recognition.onend = () => {
+          if (modeRef.current === 'listening') {
+             triggerPendingState();
+          }
+        };
+
+        recognition.onresult = (event) => {
+          let currentInterim = '';
+          let currentFinal = '';
+
+          for (let i = event.resultIndex; i < event.results.length; ++i) {
+            if (event.results[i].isFinal) {
+              currentFinal += event.results[i][0].transcript;
+            } else {
+              currentInterim += event.results[i][0].transcript;
+            }
+          }
+
+          if (currentFinal) {
+            setTranscript(prev => {
+              let newText = currentFinal.trim();
+              if (!newText) return prev;
+              
+              if (prev && prev.trim().length > 0) {
+                 const prevTrim = prev.trim();
+                 const lastChar = prevTrim.slice(-1);
+                 const hasPunctuation = ['.', '?', '!', ',', ';', ':'].includes(lastChar);
+                 const lastWord = prevTrim.split(' ').pop().toLowerCase();
+                 const connectors = ['and', 'but', 'or', 'so', 'because', 'however', 'although'];
+                 const isConnector = connectors.includes(lastWord);
+                 const isCapitalized = /^[A-Z]/.test(newText);
+
+                 if (!hasPunctuation) {
+                    if (isConnector) {
+                       newText = newText.charAt(0).toLowerCase() + newText.slice(1);
+                       return prev + " " + newText;
+                    } else if (isCapitalized) {
+                       return prevTrim + ". " + newText;
+                    }
+                 }
+              } else {
+                 newText = newText.charAt(0).toUpperCase() + newText.slice(1);
+              }
+              return prev + (prev ? ' ' : '') + newText;
+            });
+          }
+          setInterimTranscript(currentInterim);
+        };
+
+        recognitionRef.current = recognition;
+        getAudioDevices();
+      } else {
+        setIsSupported(false);
+      }
+    }
+
+    return () => {
+      if (recognitionRef.current) recognitionRef.current.stop();
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+      if (pendingSubmitTimerRef.current) clearTimeout(pendingSubmitTimerRef.current);
+    };
+  }, []);
+
+  const startSession = () => {
+    if (modeRef.current !== 'idle') return;
+    setInterimTranscript('');
+    try { recognitionRef.current.start(); } catch (e) {}
+  };
+
+  const endSession = () => {
+    if (recognitionRef.current) recognitionRef.current.stop();
+  };
+
+  const triggerPendingState = () => {
+    let fullText = transcriptRef.current + (interimTranscriptRef.current ? ' ' + interimTranscriptRef.current : '');
+    fullText = fullText.replace(/\s+/g, ' ').trim();
+
+    if (!fullText) {
+      setMode('idle');
+      return;
+    }
+    if (interimTranscriptRef.current) {
+      setTranscript(fullText);
+      setInterimTranscript('');
+    }
+    setMode('pending');
+
+    if (pendingSubmitTimerRef.current) clearTimeout(pendingSubmitTimerRef.current);
+    pendingSubmitTimerRef.current = setTimeout(() => commitMessage(), 2000); 
+  };
+
+  const commitMessage = (manualText = null) => {
+    let textToCommit = manualText !== null ? manualText : transcriptRef.current;
+    if (!textToCommit || !textToCommit.trim()) {
+        setMode('idle');
+        return;
+    }
+    
+    textToCommit = textToCommit.trim();
+    const lastChar = textToCommit.slice(-1);
+    
+    const questionStarters = [
+      'who', 'what', 'where', 'when', 'why', 'how', 'guess',
+      'is', 'are', 'am', 'was', 'were', 
+      'can', 'could', 'should', 'would', 'will', 'won\'t',
+      'do', 'does', 'did', 'don\'t', 'doesn\'t', 'didn\'t',
+      'have', 'has', 'had', 'haven\'t', 'hasn\'t', 'hadn\'t',
+      'may', 'might'
+    ];
+    
+    const firstWord = textToCommit.split(' ')[0].toLowerCase().replace(/['"]/g, '');
+
+    if (!['.', '?', '!'].includes(lastChar)) {
+       textToCommit += questionStarters.includes(firstWord) ? '?' : '.';
+    }
+
+    const newMessage = {
+      id: Date.now(),
+      text: textToCommit,
+      timestamp: new Date()
+    };
+    setMessages(prev => [newMessage, ...prev]);
+    setTranscript('');
+    setInterimTranscript('');
+    setEditText('');
+    setMode('idle');
+  };
+
+  const cancelMessage = () => {
+    if (pendingSubmitTimerRef.current) clearTimeout(pendingSubmitTimerRef.current);
+    setTranscript('');
+    setInterimTranscript('');
+    setEditText('');
+    setMode('idle');
+  };
+
+  const enterEditMode = () => {
+    if (pendingSubmitTimerRef.current) clearTimeout(pendingSubmitTimerRef.current);
+    setEditText(transcriptRef.current); 
+    setMode('editing');
+  };
+
+  const handleToggleClick = () => {
+    if (mode === 'listening') endSession();
+    else if (mode === 'idle') startSession();
+  };
+
+  const handleDeviceChange = async (deviceId) => {
+    setSelectedDeviceId(deviceId);
+    setIsSettingsOpen(false);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: deviceId } } });
+      stream.getTracks().forEach(track => track.stop());
+    } catch (e) {}
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.code === 'Space') {
+        if (modeRef.current === 'editing') return;
+        e.preventDefault(); 
+        if (!e.repeat && modeRef.current === 'idle') startSession();
+      }
+    };
+    const handleKeyUp = (e) => {
+      if (e.code === 'Space') {
+        if (modeRef.current === 'editing') return;
+        e.preventDefault();
+        if (modeRef.current === 'listening') endSession();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleNavKeys = (e) => {
+      if (e.code === 'Escape') {
+        e.preventDefault();
+        if (mode === 'pending') enterEditMode();
+        else if (mode === 'editing') cancelMessage();
+      }
+      if (e.key === 'Enter' && !e.shiftKey && mode === 'editing') {
+        e.preventDefault();
+        commitMessage(editText);
+      }
+    };
+    window.addEventListener('keydown', handleNavKeys);
+    return () => window.removeEventListener('keydown', handleNavKeys);
+  }, [mode, editText]);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (settingsRef.current && !settingsRef.current.contains(event.target)) {
+        setIsSettingsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+
+  return (
+    <div className="min-h-screen bg-black text-white flex flex-col items-center justify-start p-6 overflow-x-hidden relative selection:bg-pink-500/30">
+      
+      {/* Background Ambience */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none">
+        <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-white/5 rounded-full blur-[100px] transition-opacity duration-700 ${mode === 'listening' ? 'opacity-100 scale-110' : 'opacity-50 scale-100'}`} />
+      </div>
+
+      {/* Settings Button */}
+      <div className="fixed top-6 right-6 z-[60]" ref={settingsRef}>
+        <button 
+          onClick={() => setIsSettingsOpen(!isSettingsOpen)}
+          className="p-3 bg-white/5 hover:bg-white/10 rounded-full text-zinc-400 hover:text-white transition-colors backdrop-blur-sm"
+        >
+          <Settings className="w-5 h-5" />
+        </button>
+
+        {isSettingsOpen && (
+          <div className="absolute right-0 top-14 w-64 bg-zinc-900 border border-white/10 rounded-2xl p-2 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="text-xs font-bold text-zinc-500 uppercase tracking-widest px-3 py-2">
+              Select Microphone
+            </div>
+            <div className="flex flex-col gap-1 max-h-60 overflow-y-auto">
+              {audioDevices.length > 0 ? (
+                audioDevices.map((device) => (
+                  <button
+                    key={device.deviceId}
+                    onClick={() => handleDeviceChange(device.deviceId)}
+                    className={`text-left text-sm px-3 py-2 rounded-lg transition-colors flex items-center justify-between ${
+                      selectedDeviceId === device.deviceId 
+                        ? 'bg-white/10 text-white' 
+                        : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'
+                    }`}
+                  >
+                    <span className="truncate pr-2">{device.label || `Microphone ${device.deviceId.slice(0,4)}...`}</span>
+                    {selectedDeviceId === device.deviceId && <Check className="w-3 h-3 text-green-400 shrink-0" />}
+                  </button>
+                ))
+              ) : (
+                <div className="px-3 py-2 text-zinc-600 text-xs italic">
+                  No microphones found or permission denied.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* HEADER SPACER 
+          Increased from 400px to 450px to provide ample room 
+          so the text content starts well below the header elements.
+      */}
+      <div className="w-full shrink-0 h-[450px] pointer-events-none" aria-hidden="true" />
+
+      {/* FIXED HEADER */}
+      <div className="fixed top-0 left-0 right-0 z-50 flex justify-center pointer-events-none">
+        <div className={`w-full max-w-2xl pointer-events-auto transition-all duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${isCompact ? 'pt-4 px-6' : 'pt-20 px-6'}`}>
+          
+          <div 
+            className={`
+              relative w-full backdrop-blur-xl border shadow-2xl
+              transition-all duration-700 ease-[cubic-bezier(0.34,1.56,0.64,1)]
+              ${isCompact 
+                ? 'h-20 rounded-full border-white/20 bg-black/80 overflow-hidden' 
+                : 'h-[320px] rounded-[3rem] border-transparent bg-transparent overflow-visible' 
+              }
+            `}
+          >
+              {/* THE BLOB */}
+              <div 
+                className={`
+                  absolute top-1/2 -translate-y-1/2 group cursor-pointer 
+                  transition-all duration-700 ease-[cubic-bezier(0.34,1.56,0.64,1)]
+                  ${isCompact ? 'left-4 w-14 h-14' : 'left-1/2 -translate-x-1/2 w-48 h-48 md:w-64 md:h-64'}
+                  ${mode === 'editing' ? 'opacity-20 blur-sm grayscale' : 'opacity-100'}
+                `} 
+                onClick={handleToggleClick}
+              >
+                <div className={`absolute inset-0 rounded-full blur-3xl transition-all duration-500 ${mode === 'listening' && !isCompact ? 'bg-yellow-400 opacity-40 scale-125' : 'opacity-0 scale-90'}`} />
+                <div 
+                  className={`
+                    w-full h-full bg-[length:400%_400%]
+                    ${mode === 'listening'
+                      ? 'bg-gradient-to-r from-yellow-300 via-orange-300 to-blue-600'
+                      : 'bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500'
+                    }
+                    transition-all duration-700 ease-in-out
+                    shadow-[inset_-2px_-2px_10px_rgba(0,0,0,0.2),0_0_15px_rgba(255,255,255,0.3)]
+                    ${mode === 'listening' ? 'animate-blob-active scale-110' : 'animate-blob-idle hover:scale-105'}
+                  `}
+                  style={{
+                    borderRadius: mode === 'listening' ? '45% 55% 40% 60% / 55% 45% 60% 40%' : '50% 50% 50% 50% / 50% 50% 50% 50%' 
+                  }}
+                >
+                  {!isCompact && (
+                    <div className={`absolute inset-0 flex items-center justify-center transition-opacity duration-300 ${mode === 'listening' || mode === 'pending' ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                      {mode === 'listening' && <MicOff className="text-white/80 w-12 h-12" />}
+                      {mode === 'pending' && <Send className="text-white/80 w-12 h-12 animate-pulse" />}
+                      {mode === 'idle' && <Mic className="text-white/80 w-12 h-12" />}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* STATUS TEXT */}
+              <div 
+                className={`
+                  absolute transition-all duration-700 ease-[cubic-bezier(0.34,1.56,0.64,1)]
+                  ${isCompact 
+                    ? 'right-8 top-1/2 -translate-y-1/2 text-right' 
+                    : 'left-1/2 -translate-x-1/2 bottom-0 text-center w-full translate-y-20' // Increased push down
+                  }
+                `}
+              >
+                {!isSupported && <div className="text-red-400 text-sm">Browser not supported.</div>}
+                {permissionError && <div className="text-red-400 text-sm">Microphone denied.</div>}
+                
+                {isSupported && !permissionError && (
+                    <div className={`font-medium tracking-widest uppercase transition-colors duration-500 text-sm ${mode === 'listening' ? 'text-white' : 'text-zinc-500'}`}>
+                      {mode === 'listening' && 'Listening...'}
+                      {mode === 'pending' && 'Sending...'}
+                      {mode === 'editing' && 'Edit Mode'}
+                      {mode === 'idle' && (isCompact ? 'Hold Space' : 'Hold Space to Speak')}
+                    </div>
+                )}
+                
+                {!isCompact && mode === 'pending' && (
+                  <div className="text-[10px] text-zinc-400 animate-pulse mt-1">
+                    Press <span className="text-white font-bold border border-white/20 rounded px-1">Esc</span> to edit
+                  </div>
+                )}
+              </div>
+          </div>
+        </div>
+      </div>
+
+      {/* MAIN CONTENT FLOW */}
+      {/* Removed negative margin (mt-4 instead of -mt-8) to respect the spacer */}
+      <div className="relative z-10 w-full max-w-2xl flex flex-col gap-4 pb-20 mt-4">
+        
+        {/* Active Transcript Area */}
+        <div className="w-full min-h-[140px] flex flex-col items-center justify-start shrink-0 mb-8 transition-all duration-300 z-20 relative">
+            {mode !== 'editing' && (transcript || interimTranscript) ? (
+              <div className="animate-in fade-in zoom-in-95 duration-300 w-full bg-black/40 backdrop-blur-sm rounded-xl p-4">
+                <p className="text-2xl md:text-3xl font-light leading-relaxed text-center text-white/90">
+                  {transcript}
+                  <span className="text-white/50">{interimTranscript}</span>
+                </p>
+                {mode === 'pending' && (
+                  <div className="mt-6 w-full flex justify-center">
+                    <div className="w-64 h-1 bg-white/10 rounded-full overflow-hidden">
+                      <div className="h-full bg-white animate-progress-bar origin-left" />
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+                mode === 'idle' && messages.length === 0 && (
+                  <div className="w-full h-full flex items-center justify-center text-zinc-600 font-light animate-in fade-in">
+                    Your words will appear here.
+                  </div>
+                )
+            )}
+        </div>
+        
+        {/* Thread History */}
+        {messages.length > 0 && (
+          <div className="w-full flex flex-col gap-4 animate-in fade-in slide-in-from-bottom-8 duration-700">
+            <div className="flex items-center gap-2 text-zinc-500 text-xs font-bold uppercase tracking-widest mb-2 px-2">
+              <MessageSquare className="w-3 h-3" />
+              Thread History
+            </div>
+            
+            {messages.map((msg, index) => (
+              <div 
+                key={msg.id} 
+                className="bg-white/5 hover:bg-white/10 transition-colors p-4 rounded-2xl border border-white/5 backdrop-blur-sm animate-in fade-in slide-in-from-bottom-4 fill-mode-backwards group"
+                style={{ animationDelay: `${index * 50}ms` }}
+              >
+                <div className="flex justify-between items-start gap-4">
+                  <p className="text-white/80 text-lg font-light leading-relaxed">{msg.text}</p>
+                </div>
+                <div className="mt-2 flex justify-between items-center">
+                  <span className="text-xs text-zinc-500 font-mono">
+                    {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                  <span className="text-[10px] text-green-400/80 bg-green-900/20 px-2 py-1 rounded-full border border-green-900/30">
+                    Sent
+                  </span>
+                </div>
+              </div>
+            ))}
+            <div className="flex justify-center mt-4">
+              <button onClick={() => setMessages([])} className="text-xs text-zinc-500 hover:text-red-400 transition-colors flex items-center gap-2 px-4 py-2">
+                <X className="w-3 h-3" />
+                Clear Thread
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Edit Mode Overlay */}
+      {mode === 'editing' && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
+            <div className="relative bg-zinc-900 rounded-2xl p-1 w-full max-w-2xl border border-white/10 shadow-2xl animate-in zoom-in-95 slide-in-from-bottom-4">
+              <textarea
+                ref={textareaRef}
+                value={editText}
+                onChange={(e) => setEditText(e.target.value)}
+                className="w-full bg-black/50 text-white text-xl md:text-2xl font-light p-6 rounded-xl focus:outline-none resize-none"
+                rows={5}
+              />
+              <div className="flex justify-between items-center px-4 pb-4 pt-2">
+                 <div className="text-xs text-zinc-500">
+                    <span className="font-bold text-zinc-400">Esc</span> to cancel • <span className="font-bold text-zinc-400">Enter</span> to send
+                 </div>
+                 <div className="flex gap-2">
+                    <button onClick={cancelMessage} className="p-2 hover:bg-red-500/20 rounded-full text-zinc-400 hover:text-red-400 transition-colors">
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                    <button onClick={() => commitMessage(editText)} className="p-2 bg-white text-black rounded-full hover:bg-zinc-200 transition-colors">
+                      <CornerDownLeft className="w-5 h-5" />
+                    </button>
+                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+      <style>{`
+        @keyframes blob-idle {
+          0%, 100% { border-radius: 50% 50% 50% 50% / 50% 50% 50% 50%; transform: scale(1); }
+          33% { border-radius: 55% 45% 50% 50% / 50% 55% 45% 50%; transform: scale(1.02); }
+          66% { border-radius: 45% 55% 45% 55% / 55% 45% 50% 50%; transform: scale(0.98); }
+        }
+        @keyframes blob-active {
+          0% { border-radius: 45% 55% 40% 60% / 55% 45% 60% 40%; transform: scale(1.1) rotate(0deg); }
+          25% { border-radius: 55% 45% 50% 50% / 50% 55% 45% 50%; transform: scale(1.15) rotate(2deg); }
+          50% { border-radius: 40% 60% 55% 45% / 45% 55% 40% 60%; transform: scale(1.05) rotate(-2deg); }
+          75% { border-radius: 55% 45% 45% 55% / 55% 45% 50% 50%; transform: scale(1.12) rotate(1deg); }
+          100% { border-radius: 45% 55% 40% 60% / 55% 45% 60% 40%; transform: scale(1.1) rotate(0deg); }
+        }
+        @keyframes gradient-move {
+          0% { background-position: 0% 50%; }
+          50% { background-position: 100% 50%; }
+          100% { background-position: 0% 50%; }
+        }
+        @keyframes progress-bar {
+          from { transform: translateX(-100%); }
+          to { transform: translateX(0%); }
+        }
+        .animate-blob-idle { animation: blob-idle 6s ease-in-out infinite, gradient-move 8s ease infinite; }
+        .animate-blob-active { animation: blob-active 2s ease-in-out infinite, gradient-move 3s ease infinite; }
+        .animate-progress-bar { animation: progress-bar 2s linear forwards; }
+      `}</style>
+    </div>
+  );
+}
