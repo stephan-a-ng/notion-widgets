@@ -13,16 +13,6 @@ export function TranscriptDisplay({ transcript, interimTranscript, mode, isLocke
             {transcript}
             <span className="text-white/50">{interimTranscript}</span>
           </p>
-          {mode === 'pending' && (
-            <div className="mt-6 w-full flex justify-center">
-              <div className="w-64 h-1 bg-white/10 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-white animate-progress-bar origin-left"
-                  style={{ animationDuration: '1.3s' }}
-                />
-              </div>
-            </div>
-          )}
         </div>
       ) : (
         !isLocked && mode === 'idle' && messagesCount === 0 && (

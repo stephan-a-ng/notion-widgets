@@ -1,5 +1,5 @@
 import React from 'react';
-import { Mic, MicOff, Send, Loader2 } from 'lucide-react';
+import { Mic, MicOff, Send } from 'lucide-react';
 import './Orb.css';
 
 export function Orb({
@@ -49,6 +49,15 @@ export function Orb({
       {/* Dynamic Glow */}
       <div className={`absolute inset-0 rounded-full blur-3xl transition-all duration-500 ${getGlowStyles()}`} />
 
+      {/* Orbiting Electrons (thinking state) */}
+      {mode === 'thinking' && !isCompact && (
+        <div className="electron-orbit-container">
+          <div className="electron electron-1" />
+          <div className="electron electron-2" />
+          <div className="electron electron-3" />
+        </div>
+      )}
+
       {/* Dynamic Orb */}
       <div
         className={`
@@ -67,12 +76,11 @@ export function Orb({
         }}
       >
         {!isCompact && (
-          <div className={`absolute inset-0 flex items-center justify-center transition-opacity duration-300 ${mode === 'listening' || mode === 'pending' || mode === 'thinking' || (isLocked && !unlockStatus.startsWith('level')) ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+          <div className={`absolute inset-0 flex items-center justify-center transition-opacity duration-300 ${mode === 'listening' || mode === 'pending' || (isLocked && !unlockStatus.startsWith('level')) ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
             {unlockStatus === 'idle' && !isLocked && (
               <>
                 {mode === 'listening' && <MicOff className="text-white/80 w-12 h-12" />}
                 {mode === 'pending' && <Send className="text-white/80 w-12 h-12 animate-pulse" />}
-                {mode === 'thinking' && <Loader2 className="text-white/80 w-12 h-12 animate-spin" />}
                 {mode === 'idle' && <Mic className="text-white/80 w-12 h-12" />}
               </>
             )}

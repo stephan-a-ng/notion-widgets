@@ -34,13 +34,84 @@
   100% { background-position: 0% 50%; }
 }
 
-@keyframes progress-bar {
-  from { transform: translateX(-100%); }
-  to { transform: translateX(0%); }
+/* 3D electron orbit - tilted elliptical path */
+@keyframes electron-orbit {
+  0% {
+    transform: rotateX(70deg) rotateZ(0deg) translateX(140%) rotateZ(0deg) rotateX(-70deg);
+  }
+  100% {
+    transform: rotateX(70deg) rotateZ(360deg) translateX(140%) rotateZ(-360deg) rotateX(-70deg);
+  }
+}
+
+/* Second electron on different orbit */
+@keyframes electron-orbit-2 {
+  0% {
+    transform: rotateX(70deg) rotateY(60deg) rotateZ(0deg) translateX(140%) rotateZ(0deg) rotateY(-60deg) rotateX(-70deg);
+  }
+  100% {
+    transform: rotateX(70deg) rotateY(60deg) rotateZ(360deg) translateX(140%) rotateZ(-360deg) rotateY(-60deg) rotateX(-70deg);
+  }
+}
+
+/* Third electron on yet another orbit */
+@keyframes electron-orbit-3 {
+  0% {
+    transform: rotateX(70deg) rotateY(-60deg) rotateZ(0deg) translateX(140%) rotateZ(0deg) rotateY(60deg) rotateX(-70deg);
+  }
+  100% {
+    transform: rotateX(70deg) rotateY(-60deg) rotateZ(360deg) translateX(140%) rotateZ(-360deg) rotateY(60deg) rotateX(-70deg);
+  }
+}
+
+/* Electron glow pulse */
+@keyframes electron-pulse {
+  0%, 100% { opacity: 0.8; box-shadow: 0 0 8px 4px currentColor; }
+  50% { opacity: 1; box-shadow: 0 0 16px 8px currentColor; }
 }
 
 .animate-blob-idle { animation: blob-idle 6s ease-in-out infinite, gradient-move 8s ease infinite; }
 .animate-blob-active { animation: blob-active 2s ease-in-out infinite, gradient-move 3s ease infinite; }
 .animate-blob-thinking { animation: blob-thinking 1.5s ease-in-out infinite, gradient-move 4s ease infinite; }
 .animate-blob-failure { animation: blob-failure 2s ease-in-out infinite, gradient-move 3s ease infinite; }
-.animate-progress-bar { animation: progress-bar 1.3s linear forwards; }
+
+/* Electron orbit container */
+.electron-orbit-container {
+  position: absolute;
+  inset: 0;
+  perspective: 800px;
+  transform-style: preserve-3d;
+}
+
+/* Individual electron */
+.electron {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  border-radius: 50%;
+  background: white;
+  animation: electron-pulse 1s ease-in-out infinite;
+  transform-style: preserve-3d;
+}
+
+.electron-1 {
+  animation: electron-orbit 2s linear infinite, electron-pulse 1s ease-in-out infinite;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.electron-2 {
+  animation: electron-orbit-2 2.5s linear infinite, electron-pulse 1.2s ease-in-out infinite;
+  animation-delay: -0.8s;
+  color: rgba(147, 197, 253, 0.8);
+  background: rgb(147, 197, 253);
+}
+
+.electron-3 {
+  animation: electron-orbit-3 3s linear infinite, electron-pulse 1.4s ease-in-out infinite;
+  animation-delay: -1.6s;
+  color: rgba(196, 181, 253, 0.8);
+  background: rgb(196, 181, 253);
+}

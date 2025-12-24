@@ -56,11 +56,11 @@ export default function App() {
     threads,
     currentThreadId,
     messages,
-    addMessage,
     loadThread,
-    deleteThread,
     clearCurrentThread,
-    createNewThread
+    createNewThread,
+    refreshThreads,
+    isLoading: isLoadingThreads
   } = useThreads();
   const [showThreadBrowser, setShowThreadBrowser] = useState(false);
 
@@ -110,36 +110,20 @@ export default function App() {
       return;
     }
 
-    // Standard flow - add user message
-    const userMessage = {
-      id: Date.now(),
-      text: finalText,
-      timestamp: new Date(),
-      role: 'user'
-    };
-    addMessage(userMessage);
     setEditText('');
 
     // Show thinking state while waiting for response
     setMode('thinking');
 
     // Play audio response (waits for Tasklet + ElevenLabs)
-    const responseText = await playAudioResponse();
+    await playAudioResponse();
 
-    // Add assistant response to thread history
-    if (responseText) {
-      const assistantMessage = {
-        id: Date.now() + 1,
-        text: responseText,
-        timestamp: new Date(),
-        role: 'assistant'
-      };
-      addMessage(assistantMessage);
-    }
+    // Refresh threads from Airtable to show new conversation
+    refreshThreads();
 
     // Only go back to idle after response completes
     setMode('idle');
-  }, [isLocked, attemptUnlock, playAudioResponse, addMessage]);
+  }, [isLocked, attemptUnlock, playAudioResponse, refreshThreads]);
 
   // Handle session end (called by speech recognition)
   const handleSessionEnd = useCallback((transcript, interimTranscript) => {
@@ -325,9 +309,10 @@ export default function App() {
           threads={threads}
           currentThreadId={currentThreadId}
           onSelect={loadThread}
-          onDelete={deleteThread}
           onNewThread={createNewThread}
           onClose={() => setShowThreadBrowser(false)}
+          isLoading={isLoadingThreads}
+          onRefresh={refreshThreads}
         />
       )}
     </div>

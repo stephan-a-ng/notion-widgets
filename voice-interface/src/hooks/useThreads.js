@@ -1,174 +1,113 @@
 import { useState, useCallback, useEffect } from 'react';
-
-const THREADS_STORAGE_KEY = 'voice-interface-threads';
-const CURRENT_THREAD_KEY = 'voice-interface-current-thread';
-
-// Generate unique thread ID
-function generateThreadId() {
-  return `thread_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-}
-
-// Load all threads from localStorage
-function loadThreads() {
-  try {
-    const stored = localStorage.getItem(THREADS_STORAGE_KEY);
-    if (stored) {
-      const threads = JSON.parse(stored);
-      // Convert timestamp strings back to Date objects
-      return threads.map(t => ({
-        ...t,
-        createdAt: new Date(t.createdAt),
-        updatedAt: new Date(t.updatedAt),
-        messages: t.messages.map(m => ({
-          ...m,
-          timestamp: new Date(m.timestamp)
-        }))
-      }));
-    }
-  } catch (e) {
-    console.error('Failed to load threads:', e);
-  }
-  return [];
-}
-
-// Save threads to localStorage
-function saveThreads(threads) {
-  try {
-    localStorage.setItem(THREADS_STORAGE_KEY, JSON.stringify(threads));
-  } catch (e) {
-    console.error('Failed to save threads:', e);
-  }
-}
-
-// Load current thread ID
-function loadCurrentThreadId() {
-  try {
-    return localStorage.getItem(CURRENT_THREAD_KEY);
-  } catch (e) {
-    return null;
-  }
-}
-
-// Save current thread ID
-function saveCurrentThreadId(threadId) {
-  try {
-    if (threadId) {
-      localStorage.setItem(CURRENT_THREAD_KEY, threadId);
-    } else {
-      localStorage.removeItem(CURRENT_THREAD_KEY);
-    }
-  } catch (e) {
-    console.error('Failed to save current thread ID:', e);
-  }
-}
+import { AIRTABLE_API_URL, AIRTABLE_TOKEN } from '../config/constants';
 
 export function useThreads() {
-  const [threads, setThreads] = useState(() => loadThreads());
-  const [currentThreadId, setCurrentThreadId] = useState(() => loadCurrentThreadId());
+  const [threads, setThreads] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [currentThreadId, setCurrentThreadId] = useState(null);
 
-  // Get current thread's messages
-  const currentThread = threads.find(t => t.id === currentThreadId);
-  const messages = currentThread?.messages || [];
+  // Fetch all thread history from Airtable
+  const fetchThreads = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      // Fetch all records, sorted by created time descending
+      const response = await fetch(
+        `${AIRTABLE_API_URL}?sort[0][field]=Created&sort[0][direction]=desc`,
+        {
+          headers: {
+            'Authorization': `Bearer ${AIRTABLE_TOKEN}`
+          }
+        }
+      );
 
-  // Save threads whenever they change
-  useEffect(() => {
-    saveThreads(threads);
-  }, [threads]);
+      if (!response.ok) {
+        throw new Error(`Airtable fetch failed: ${response.status}`);
+      }
 
-  // Save current thread ID whenever it changes
-  useEffect(() => {
-    saveCurrentThreadId(currentThreadId);
-  }, [currentThreadId]);
+      const data = await response.json();
 
-  // Create a new thread
-  const createNewThread = useCallback(() => {
-    const newThread = {
-      id: generateThreadId(),
-      title: 'New Conversation',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      messages: []
-    };
-    setThreads(prev => [newThread, ...prev]);
-    setCurrentThreadId(newThread.id);
-    return newThread.id;
+      if (data.records) {
+        // Transform Airtable records into thread format
+        const threadList = data.records
+          .filter(record => record.fields['Job Status'] === 'Done')
+          .map(record => {
+            const fields = record.fields;
+            return {
+              id: record.id,
+              jobId: fields['Job ID'] || record.id,
+              title: fields['Request Text']?.slice(0, 50) || 'Conversation',
+              requestText: fields['Request Text'] || '',
+              responseText: fields['Response Text'] || '',
+              createdAt: new Date(record.createdTime),
+              status: fields['Job Status']
+            };
+          });
+
+        setThreads(threadList);
+      }
+    } catch (error) {
+      console.error('Failed to fetch threads from Airtable:', error);
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
-  // Add a message to the current thread
-  const addMessage = useCallback((message) => {
-    // If no current thread, create one
-    if (!currentThreadId) {
-      const newId = generateThreadId();
-      const newThread = {
-        id: newId,
-        title: message.role === 'user' ? message.text.slice(0, 50) : 'New Conversation',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        messages: [message]
-      };
-      setThreads(prev => [newThread, ...prev]);
-      setCurrentThreadId(newId);
-      return;
+  // Fetch threads on mount
+  useEffect(() => {
+    fetchThreads();
+  }, [fetchThreads]);
+
+  // Get current thread
+  const currentThread = threads.find(t => t.id === currentThreadId);
+
+  // Convert single Airtable record to messages format
+  const messages = currentThread ? [
+    {
+      id: `${currentThread.id}-response`,
+      text: currentThread.responseText,
+      timestamp: currentThread.createdAt,
+      role: 'assistant'
+    },
+    {
+      id: `${currentThread.id}-request`,
+      text: currentThread.requestText,
+      timestamp: currentThread.createdAt,
+      role: 'user'
     }
+  ].filter(m => m.text) : [];
 
-    setThreads(prev => prev.map(t => {
-      if (t.id === currentThreadId) {
-        const updatedMessages = [message, ...t.messages];
-        // Update title from first user message if still default
-        let title = t.title;
-        if (title === 'New Conversation' && message.role === 'user') {
-          title = message.text.slice(0, 50) + (message.text.length > 50 ? '...' : '');
-        }
-        return {
-          ...t,
-          title,
-          updatedAt: new Date(),
-          messages: updatedMessages
-        };
-      }
-      return t;
-    }));
-  }, [currentThreadId]);
-
-  // Load an existing thread
+  // Load a thread
   const loadThread = useCallback((threadId) => {
     setCurrentThreadId(threadId);
   }, []);
 
-  // Delete a thread
-  const deleteThread = useCallback((threadId) => {
-    setThreads(prev => prev.filter(t => t.id !== threadId));
-    if (currentThreadId === threadId) {
-      setCurrentThreadId(null);
-    }
-  }, [currentThreadId]);
-
-  // Clear current thread messages (but keep the thread)
-  const clearCurrentThread = useCallback(() => {
-    if (!currentThreadId) return;
-    setThreads(prev => prev.map(t => {
-      if (t.id === currentThreadId) {
-        return { ...t, messages: [], updatedAt: new Date() };
-      }
-      return t;
-    }));
-  }, [currentThreadId]);
-
-  // Start fresh (new thread, no history loaded)
-  const startFresh = useCallback(() => {
+  // Start a new thread (clear current selection)
+  const createNewThread = useCallback(() => {
     setCurrentThreadId(null);
   }, []);
+
+  // Clear current thread (just deselect)
+  const clearCurrentThread = useCallback(() => {
+    setCurrentThreadId(null);
+  }, []);
+
+  // Refresh threads from Airtable
+  const refreshThreads = useCallback(() => {
+    fetchThreads();
+  }, [fetchThreads]);
 
   return {
     threads,
     currentThreadId,
     currentThread,
     messages,
-    createNewThread,
-    addMessage,
+    isLoading,
     loadThread,
-    deleteThread,
+    createNewThread,
     clearCurrentThread,
-    startFresh
+    refreshThreads,
+    // For compatibility with existing code
+    addMessage: () => {},
+    deleteThread: () => {}
   };
 }
