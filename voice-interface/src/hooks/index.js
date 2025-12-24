@@ -4,3 +4,4 @@ export { useLockout } from './useLockout';
 export { useSpeechRecognition } from './useSpeechRecognition';
 export { useAudioOutput } from './useAudioOutput';
 export { useKeyboardControls } from './useKeyboardControls';
+export { useThreads } from './useThreads';

@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ticket Date Updater</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+    .container {
+      max-width: 600px;
+      margin: 40px auto;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      overflow: hidden;
+    }
+    .tabs {
+      display: flex;
+      gap: 4px;
+      padding: 8px;
+      background: #f7fafc;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    .tab {
+      flex: 1;
+      padding: 10px 16px;
+      background: transparent;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      color: #718096;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .tab:hover { background: #edf2f7; color: #2d3748; }
+    .tab.active { background: white; color: #1a202c; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .content { padding: 24px; }
+    h2 { font-size: 20px; color: #2d3748; margin-bottom: 24px; }
+    .form-group { margin-bottom: 20px; }
+    label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      color: #718096;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+    select, input, textarea {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      font-size: 14px;
+      color: #2d3748;
+      background: #f7fafc;
+      transition: all 0.2s;
+    }
+    select:focus, input:focus, textarea:focus {
+      outline: none;
+      border-color: #667eea;
+      background: white;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+    textarea { resize: none; font-family: inherit; }
+    button {
+      width: 100%;
+      padding: 12px 24px;
+      background: #2d3748;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    button:hover { background: #1a202c; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+    button:disabled { background: #cbd5e0; cursor: not-allowed; transform: none; }
+    .error {
+      background: #fff5f5;
+      border: 1px solid #feb2b2;
+      color: #c53030;
+      padding: 16px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      font-size: 14px;
+    }
+    .error-title { font-weight: 600; margin-bottom: 4px; }
+    .success {
+      background: #f0fff4;
+      border: 1px solid #9ae6b4;
+      color: #22543d;
+      padding: 16px;
+      border-radius: 8px;
+      margin-top: 20px;
+      font-size: 14px;
+      animation: fadeIn 0.3s;
+    }
+    .loading {
+      text-align: center;
+      padding: 60px 20px;
+      color: #a0aec0;
+    }
+    .spinner {
+      display: inline-block;
+      width: 40px;
+      height: 40px;
+      border: 4px solid #e2e8f0;
+      border-top-color: #667eea;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-bottom: 12px;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script>
+    const { useState, useEffect, createElement: h } = React;
+
+    const APP_CONFIG = {
+      webhooks: {
+        prototyping: {
+          url: 'https://automations.moonfive.tech/webhook/4788b7df-8d94-4938-a29c-ec939884fb6b',
+          label: 'Prototyping'
+        },
+        production: {
+          url: 'https://automations.moonfive.tech/webhook/ae3bc892-15e4-4643-ba96-279f6e1f0197',
+          label: 'Production'
+        },
+        certification: {
+          url: 'https://automations.moonfive.tech/webhook/a73bd4e7-407f-4dda-b9f6-2d6285a8b37e',
+          label: 'Certification'
+        }
+      },
+      postUrl: 'https://automations.moonfive.tech/webhook/c4279ca4-5c31-495a-a518-500e308d0932'
+    };
+
+    function App() {
+      const [activeTab, setActiveTab] = useState('prototyping');
+      const [tickets, setTickets] = useState([]);
+      const [loading, setLoading] = useState(false);
+      const [error, setError] = useState(null);
+      const [selectedTicketId, setSelectedTicketId] = useState('');
+      const [newDate, setNewDate] = useState('');
+      const [reason, setReason] = useState('');
+      const [submissionStatus, setSubmissionStatus] = useState('idle');
+
+      useEffect(() => {
+        fetchTickets(activeTab);
+      }, [activeTab]);
+
+      const fetchTickets = async (tabKey) => {
+        setLoading(true);
+        setError(null);
+        setTickets([]);
+        setSelectedTicketId('');
+
+        try {
+          const response = await fetch(APP_CONFIG.webhooks[tabKey].url, {
+            method: 'GET',
+            headers: { 'Accept': 'application/json' }
+          });
+
+          if (!response.ok) throw new Error(`Status: ${response.status}`);
+          const data = await response.json();
+
+          let processedTickets = [];
+          if (Array.isArray(data)) {
+            processedTickets = data;
+          } else if (data && typeof data === 'object') {
+            const possibleArray = data.data || data.items || data.tickets || data.records;
+            processedTickets = Array.isArray(possibleArray) ? possibleArray : [data];
+          }
+
+          setTickets(processedTickets);
+        } catch (err) {
+          console.error("Fetch error:", err);
+          setError(`Failed to load tickets. ${err.message}`);
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      const getTicketLabel = (t) => t.name || t.Name || t.title || t.Title || t.id || 'Ticket';
+      const getTicketId = (t) => t.id || t.ticketId || t._id;
+      const getTicketDate = (t) => {
+        if (!t) return null;
+        return t.property_date?.start || t.date || t.Date || t.due_date || null;
+      };
+
+      const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (!selectedTicketId || !newDate || !reason) return;
+
+        setSubmissionStatus('submitting');
+        const ticket = tickets.find(t => getTicketId(t) === selectedTicketId);
+        const initialDate = ticket ? (getTicketDate(ticket) || 'N/A') : 'N/A';
+
+        try {
+          const response = await fetch(APP_CONFIG.postUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: selectedTicketId,
+              initialDate,
+              newDate,
+              reason,
+              environment: activeTab
+            })
+          });
+
+          if (response.ok) {
+            setSubmissionStatus('success');
+            setReason('');
+            setNewDate('');
+            setSelectedTicketId('');
+            setTimeout(() => setSubmissionStatus('idle'), 3000);
+          } else {
+            throw new Error(`Server responded with ${response.status}`);
+          }
+        } catch (err) {
+          console.error("Post error:", err);
+          setSubmissionStatus('error');
+        }
+      };
+
+      const isFormValid = selectedTicketId && newDate && reason.trim().length > 0;
+
+      return h('div', { className: 'container' },
+        // Tabs
+        h('div', { className: 'tabs' },
+          Object.entries(APP_CONFIG.webhooks).map(([key, config]) =>
+            h('button', {
+              key: key,
+              className: 'tab' + (activeTab === key ? ' active' : ''),
+              onClick: () => setActiveTab(key)
+            }, config.label)
+          )
+        ),
+        // Content
+        h('div', { className: 'content' },
+          h('h2', null, 'Update Ticket Date'),
+
+          error ? h('div', { className: 'error' },
+            h('div', { className: 'error-title' }, 'Connection Error'),
+            h('div', null, error)
+          ) : null,
+
+          loading && tickets.length === 0 ? h('div', { className: 'loading' },
+            h('div', { className: 'spinner' }),
+            h('div', null, 'Fetching tickets...')
+          ) : h('form', { onSubmit: handleSubmit },
+            // Ticket selector
+            h('div', { className: 'form-group' },
+              h('label', null, 'Select Ticket'),
+              h('select', {
+                value: selectedTicketId,
+                onChange: (e) => setSelectedTicketId(e.target.value),
+                disabled: tickets.length === 0
+              },
+                h('option', { value: '' }, '-- Choose a ticket --'),
+                tickets.map((t, idx) => {
+                  const id = getTicketId(t) || `idx-${idx}`;
+                  const label = getTicketLabel(t);
+                  return h('option', { key: id, value: id }, label);
+                })
+              )
+            ),
+            // Date input
+            h('div', { className: 'form-group' },
+              h('label', null, 'New Target Date'),
+              h('input', {
+                type: 'date',
+                value: newDate,
+                onChange: (e) => setNewDate(e.target.value)
+              })
+            ),
+            // Reason textarea
+            h('div', { className: 'form-group' },
+              h('label', null, 'Change Reason'),
+              h('textarea', {
+                value: reason,
+                onChange: (e) => setReason(e.target.value),
+                rows: 4,
+                placeholder: 'Why is this date changing?',
+                required: true
+              })
+            ),
+            // Submit button
+            isFormValid ? h('button', {
+              type: 'submit',
+              disabled: submissionStatus === 'submitting'
+            }, submissionStatus === 'submitting' ? 'Updating...' : 'Submit Update') : null
+          ),
+
+          submissionStatus === 'success' ? h('div', { className: 'success' },
+            'Update submitted successfully!'
+          ) : null,
+
+          submissionStatus === 'error' ? h('div', { className: 'error' },
+            'Submission failed. Please try again.'
+          ) : null
+        )
+      );
+    }
+
+    console.log('Starting app...');
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(h(App));
+    console.log('App rendered successfully!');
+  </script>
+</body>
+</html>

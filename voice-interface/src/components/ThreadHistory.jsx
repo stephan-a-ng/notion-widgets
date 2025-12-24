@@ -1,15 +1,42 @@
 import React from 'react';
-import { MessageSquare, X, User, Bot } from 'lucide-react';
+import { MessageSquare, X, User, Bot, Clock, Plus } from 'lucide-react';
 
-export function ThreadHistory({ messages, onClear }) {
-  if (messages.length === 0) return null;
-
+export function ThreadHistory({ messages, onClear, onShowHistory, hasHistory }) {
   return (
     <div className="w-full flex flex-col gap-4 animate-in fade-in slide-in-from-bottom-8 duration-700">
-      <div className="flex items-center gap-2 text-zinc-500 text-xs font-bold uppercase tracking-widest mb-2 px-2">
-        <MessageSquare className="w-3 h-3" />
-        Thread History
+      {/* Thread Controls - Always show */}
+      <div className="flex items-center justify-between px-2">
+        <div className="flex items-center gap-2 text-zinc-500 text-xs font-bold uppercase tracking-widest">
+          <MessageSquare className="w-3 h-3" />
+          {messages.length > 0 ? 'Current Thread' : 'Thread'}
+        </div>
+        <div className="flex items-center gap-2">
+          {hasHistory && (
+            <button
+              onClick={onShowHistory}
+              className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-blue-400 transition-colors px-3 py-1.5 rounded-lg hover:bg-white/5"
+            >
+              <Clock className="w-3 h-3" />
+              History
+            </button>
+          )}
+        </div>
       </div>
+
+      {messages.length === 0 && (
+        <div className="text-center py-8 text-zinc-600">
+          <p className="text-sm">No messages in this thread yet</p>
+          {hasHistory && (
+            <button
+              onClick={onShowHistory}
+              className="mt-3 text-xs text-zinc-500 hover:text-blue-400 transition-colors flex items-center gap-1.5 mx-auto"
+            >
+              <Clock className="w-3 h-3" />
+              View past threads
+            </button>
+          )}
+        </div>
+      )}
 
       {messages.map((msg, index) => {
         const isAssistant = msg.role === 'assistant';
@@ -57,15 +84,17 @@ export function ThreadHistory({ messages, onClear }) {
         );
       })}
 
-      <div className="flex justify-center mt-4">
-        <button
-          onClick={onClear}
-          className="text-xs text-zinc-500 hover:text-red-400 transition-colors flex items-center gap-2 px-4 py-2"
-        >
-          <X className="w-3 h-3" />
-          Clear Thread
-        </button>
-      </div>
+      {messages.length > 0 && (
+        <div className="flex justify-center mt-4">
+          <button
+            onClick={onClear}
+            className="text-xs text-zinc-500 hover:text-red-400 transition-colors flex items-center gap-2 px-4 py-2"
+          >
+            <X className="w-3 h-3" />
+            Clear Thread
+          </button>
+        </div>
+      )}
     </div>
   );
 }

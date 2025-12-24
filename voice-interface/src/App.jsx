@@ -8,7 +8,8 @@ import {
   useLockout,
   useSpeechRecognition,
   useAudioOutput,
-  useKeyboardControls
+  useKeyboardControls,
+  useThreads
 } from './hooks';
 import {
   Header,
@@ -16,6 +17,7 @@ import {
   ThemeSelector,
   TranscriptDisplay,
   ThreadHistory,
+  ThreadBrowser,
   EditModal
 } from './components';
 
@@ -46,9 +48,21 @@ function savePreferences(prefs) {
 export default function App() {
   // Mode: 'idle' | 'listening' | 'pending' | 'editing'
   const [mode, setMode] = useState('idle');
-  const [messages, setMessages] = useState([]);
   const [editText, setEditText] = useState('');
   const [apiError, setApiError] = useState(false);
+
+  // Thread management
+  const {
+    threads,
+    currentThreadId,
+    messages,
+    addMessage,
+    loadThread,
+    deleteThread,
+    clearCurrentThread,
+    createNewThread
+  } = useThreads();
+  const [showThreadBrowser, setShowThreadBrowser] = useState(false);
 
   // UI State - load theme from localStorage
   const [currentTheme, setCurrentTheme] = useState(() => {
@@ -103,7 +117,7 @@ export default function App() {
       timestamp: new Date(),
       role: 'user'
     };
-    setMessages(prev => [userMessage, ...prev]);
+    addMessage(userMessage);
     setEditText('');
 
     // Show thinking state while waiting for response
@@ -120,12 +134,12 @@ export default function App() {
         timestamp: new Date(),
         role: 'assistant'
       };
-      setMessages(prev => [assistantMessage, ...prev]);
+      addMessage(assistantMessage);
     }
 
     // Only go back to idle after response completes
     setMode('idle');
-  }, [isLocked, attemptUnlock, playAudioResponse]);
+  }, [isLocked, attemptUnlock, playAudioResponse, addMessage]);
 
   // Handle session end (called by speech recognition)
   const handleSessionEnd = useCallback((transcript, interimTranscript) => {
@@ -288,7 +302,9 @@ export default function App() {
         {!isLocked && (
           <ThreadHistory
             messages={messages}
-            onClear={() => setMessages([])}
+            onClear={clearCurrentThread}
+            onShowHistory={() => setShowThreadBrowser(true)}
+            hasHistory={threads.length > 0}
           />
         )}
       </div>
@@ -300,6 +316,18 @@ export default function App() {
           onChange={setEditText}
           onSubmit={handleCommitFromEdit}
           onCancel={cancelMessage}
+        />
+      )}
+
+      {/* Thread Browser */}
+      {showThreadBrowser && (
+        <ThreadBrowser
+          threads={threads}
+          currentThreadId={currentThreadId}
+          onSelect={loadThread}
+          onDelete={deleteThread}
+          onNewThread={createNewThread}
+          onClose={() => setShowThreadBrowser(false)}
         />
       )}
     </div>

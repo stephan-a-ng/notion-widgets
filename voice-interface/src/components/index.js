@@ -6,4 +6,5 @@ export { ThemePreview } from './ThemeSelector/ThemePreview';
 export { EditModal } from './EditModal';
 export { TranscriptDisplay } from './TranscriptDisplay';
 export { ThreadHistory } from './ThreadHistory';
+export { ThreadBrowser } from './ThreadBrowser';
 export { Header } from './Header';
