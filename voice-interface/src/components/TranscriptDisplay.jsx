@@ -26,8 +26,9 @@ export function TranscriptDisplay({ transcript, interimTranscript, mode, isLocke
         </div>
       ) : (
         !isLocked && mode === 'idle' && messagesCount === 0 && (
-          <div className="w-full h-full flex items-center justify-center text-zinc-600 font-light animate-in fade-in">
-            Your words will appear here.
+          <div className="w-full h-full flex flex-col items-center justify-center gap-2 animate-in fade-in">
+            <span className="text-zinc-600 font-light">Your words will appear here.</span>
+            <span className="text-zinc-700 text-sm">Hold anywhere or press space to talk</span>
           </div>
         )
       )}
