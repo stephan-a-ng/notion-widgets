@@ -3,6 +3,7 @@ import { Trash2, CornerDownLeft } from 'lucide-react';
 
 export function EditModal({ text, onChange, onSubmit, onCancel }) {
   const textareaRef = useRef(null);
+  const modalRef = useRef(null);
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -10,9 +11,22 @@ export function EditModal({ text, onChange, onSubmit, onCancel }) {
     }
   }, []);
 
+  // Handle click outside to close
+  const handleBackdropClick = (e) => {
+    if (modalRef.current && !modalRef.current.contains(e.target)) {
+      onCancel();
+    }
+  };
+
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
-      <div className="relative bg-zinc-900 rounded-2xl p-1 w-full max-w-2xl border border-white/10 shadow-2xl animate-in zoom-in-95 slide-in-from-bottom-4">
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300"
+      onClick={handleBackdropClick}
+    >
+      <div
+        ref={modalRef}
+        className="relative bg-zinc-900 rounded-2xl p-1 w-full max-w-2xl border border-white/10 shadow-2xl animate-in zoom-in-95 slide-in-from-bottom-4"
+      >
         <textarea
           ref={textareaRef}
           value={text}

@@ -1,7 +1,13 @@
 import { useState, useCallback, useEffect } from 'react';
-import { AIRTABLE_API_URL, AIRTABLE_TOKEN } from '../config/constants';
+import { AIRTABLE_API_URL, AIRTABLE_THREADS_URL, AIRTABLE_TOKEN } from '../config/constants';
 
 const SESSION_MESSAGES_KEY = 'voice-interface-session-messages';
+const ACTIVE_THREAD_ID_KEY = 'voice-interface-active-thread-id';
+
+// Generate unique thread ID
+function generateThreadId() {
+  return `thread_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+}
 
 // Load session messages from localStorage
 function loadSessionMessages() {
@@ -29,9 +35,34 @@ function saveSessionMessages(messages) {
   }
 }
 
+// Load active thread ID from localStorage
+function loadActiveThreadId() {
+  try {
+    return localStorage.getItem(ACTIVE_THREAD_ID_KEY);
+  } catch (e) {
+    return null;
+  }
+}
+
+// Save active thread ID to localStorage
+function saveActiveThreadId(threadId) {
+  try {
+    if (threadId) {
+      localStorage.setItem(ACTIVE_THREAD_ID_KEY, threadId);
+    } else {
+      localStorage.removeItem(ACTIVE_THREAD_ID_KEY);
+    }
+  } catch (e) {
+    console.error('Failed to save active thread ID:', e);
+  }
+}
+
 export function useThreads() {
   // Local session messages (current conversation)
   const [sessionMessages, setSessionMessages] = useState(() => loadSessionMessages());
+
+  // Active thread ID for the current conversation (used for API calls)
+  const [activeThreadId, setActiveThreadId] = useState(() => loadActiveThreadId() || generateThreadId());
 
   // Airtable history
   const [threads, setThreads] = useState([]);
@@ -43,6 +74,11 @@ export function useThreads() {
     saveSessionMessages(sessionMessages);
   }, [sessionMessages]);
 
+  // Save active thread ID whenever it changes
+  useEffect(() => {
+    saveActiveThreadId(activeThreadId);
+  }, [activeThreadId]);
+
   // Fetch all thread history from Airtable
   const fetchThreads = useCallback(async () => {
     if (!AIRTABLE_API_URL || !AIRTABLE_TOKEN) {
@@ -52,22 +88,36 @@ export function useThreads() {
 
     setIsLoading(true);
     try {
-      // Fetch all records (Airtable returns in creation order by default)
-      const response = await fetch(
-        `${AIRTABLE_API_URL}?maxRecords=50`,
-        {
-          headers: {
-            'Authorization': `Bearer ${AIRTABLE_TOKEN}`
-          }
-        }
-      );
+      // Fetch conversations and thread metadata in parallel
+      const [conversationsResponse, threadsResponse] = await Promise.all([
+        fetch(`${AIRTABLE_API_URL}?maxRecords=50`, {
+          headers: { 'Authorization': `Bearer ${AIRTABLE_TOKEN}` }
+        }),
+        AIRTABLE_THREADS_URL ? fetch(`${AIRTABLE_THREADS_URL}?maxRecords=100`, {
+          headers: { 'Authorization': `Bearer ${AIRTABLE_TOKEN}` }
+        }) : Promise.resolve(null)
+      ]);
 
-      if (!response.ok) {
-        throw new Error(`Airtable fetch failed: ${response.status}`);
+      if (!conversationsResponse.ok) {
+        throw new Error(`Airtable fetch failed: ${conversationsResponse.status}`);
       }
 
-      const data = await response.json();
+      const data = await conversationsResponse.json();
       console.log('Conversations Airtable response:', data);
+
+      // Build thread names map from Threads table
+      const threadNamesMap = new Map();
+      if (threadsResponse && threadsResponse.ok) {
+        const threadsData = await threadsResponse.json();
+        console.log('Threads metadata:', threadsData);
+        threadsData.records?.forEach(record => {
+          const jobId = record.fields['Job ID'];
+          const name = record.fields['Name'];
+          if (jobId && name) {
+            threadNamesMap.set(jobId, name);
+          }
+        });
+      }
 
       // Log all field names from first record to help debug
       if (data.records && data.records.length > 0) {
@@ -76,34 +126,81 @@ export function useThreads() {
 
       if (data.records) {
         // Transform Airtable records into thread format
-        // Try multiple possible field names for flexibility
-        const threadList = data.records
+        // Group by Job ID (thread_id) since multiple messages share the same thread
+        const threadMap = new Map();
+
+        data.records
           .filter(record => {
             const status = record.fields['Job Status'] || record.fields['Status'] || record.fields['status'];
             // Accept Done, done, Completed, completed, or if no status field exists
             return !status || status === 'Done' || status === 'done' || status === 'Completed' || status === 'completed';
           })
-          .map(record => {
+          .forEach(record => {
             const fields = record.fields;
-            // Try multiple possible field names
             const requestText = fields['Request Text'] || fields['request_text'] || fields['text'] || fields['Text'] || fields['input'] || fields['Input'] || fields['message'] || fields['Message'] || '';
             const responseText = fields['Response Text'] || fields['response_text'] || fields['response'] || fields['Response'] || fields['output'] || fields['Output'] || fields['answer'] || fields['Answer'] || '';
             const jobId = fields['Job ID'] || fields['job_id'] || fields['id'] || record.id;
+            const createdAt = new Date(record.createdTime);
+
+            if (!requestText && !responseText) return;
+
+            // Group messages by Job ID (thread_id)
+            if (!threadMap.has(jobId)) {
+              threadMap.set(jobId, {
+                id: jobId,
+                jobId: jobId,
+                messages: [],
+                createdAt: createdAt,
+                lastMessageAt: createdAt
+              });
+            }
+
+            const thread = threadMap.get(jobId);
+            thread.messages.push({
+              recordId: record.id,
+              requestText,
+              responseText,
+              createdAt
+            });
+
+            // Track the earliest and latest message times
+            if (createdAt < thread.createdAt) {
+              thread.createdAt = createdAt;
+            }
+            if (createdAt > thread.lastMessageAt) {
+              thread.lastMessageAt = createdAt;
+            }
+          });
+
+        // Convert map to array and format for display
+        const threadList = Array.from(threadMap.values())
+          .map(thread => {
+            // Sort messages by time (oldest first)
+            thread.messages.sort((a, b) => a.createdAt - b.createdAt);
+
+            // Use first message's request as title, last message for preview
+            const firstMessage = thread.messages[0];
+            const lastMessage = thread.messages[thread.messages.length - 1];
+
+            // Use thread name from Threads table if available, otherwise use first message
+            const threadName = threadNamesMap.get(thread.jobId);
 
             return {
-              id: record.id,
-              jobId: jobId,
-              title: requestText ? requestText.slice(0, 50) : 'Conversation',
-              requestText: requestText,
-              responseText: responseText,
-              createdAt: new Date(record.createdTime),
-              status: fields['Job Status'] || fields['Status'] || 'Done'
+              id: thread.id,
+              jobId: thread.jobId,
+              title: threadName || (firstMessage.requestText ? firstMessage.requestText.slice(0, 50) : 'Conversation'),
+              hasCustomName: !!threadName,
+              requestText: firstMessage.requestText,
+              responseText: lastMessage.responseText,
+              messages: thread.messages,
+              messageCount: thread.messages.length,
+              createdAt: thread.createdAt,
+              lastMessageAt: thread.lastMessageAt
             };
           })
-          .filter(thread => thread.requestText || thread.responseText) // Only include threads with some content
-          .sort((a, b) => b.createdAt - a.createdAt); // Sort by newest first
+          .sort((a, b) => b.lastMessageAt - a.lastMessageAt); // Sort by most recent activity
 
-        console.log('Parsed threads:', threadList);
+        console.log('Parsed threads (grouped by Job ID):', threadList);
         setThreads(threadList);
       }
     } catch (error) {
@@ -122,23 +219,33 @@ export function useThreads() {
   const currentThread = threads.find(t => t.id === currentThreadId);
 
   // Messages to display:
-  // - If viewing a historical thread, show that thread's messages
-  // - Otherwise show current session messages
+  // - If viewing/continuing a historical thread, show historical + new session messages
+  // - Otherwise show current session messages only
+  // Display order: newest at top (reversed), with assistant response before user request
+  const historicalMessages = currentThreadId && currentThread
+    ? currentThread.messages
+        .flatMap(msg => [
+          // User request first, then assistant response (will be reversed below)
+          msg.requestText ? {
+            id: `${msg.recordId}-request`,
+            text: msg.requestText,
+            timestamp: msg.createdAt,
+            role: 'user'
+          } : null,
+          msg.responseText ? {
+            id: `${msg.recordId}-response`,
+            text: msg.responseText,
+            timestamp: msg.createdAt,
+            role: 'assistant'
+          } : null
+        ])
+        .filter(Boolean)
+        .reverse() // Newest first: assistant response appears before user request
+    : [];
+
+  // Combine session messages (new) with historical messages
   const messages = currentThreadId && currentThread
-    ? [
-        {
-          id: `${currentThread.id}-response`,
-          text: currentThread.responseText,
-          timestamp: currentThread.createdAt,
-          role: 'assistant'
-        },
-        {
-          id: `${currentThread.id}-request`,
-          text: currentThread.requestText,
-          timestamp: currentThread.createdAt,
-          role: 'user'
-        }
-      ].filter(m => m.text)
+    ? [...sessionMessages, ...historicalMessages]
     : sessionMessages;
 
   // Add message to current session
@@ -146,9 +253,28 @@ export function useThreads() {
     setSessionMessages(prev => [message, ...prev]);
   }, []);
 
-  // Load a historical thread
+  // Update message status (e.g., pending -> confirmed)
+  const updateMessageStatus = useCallback((messageId, status) => {
+    setSessionMessages(prev => {
+      const updated = prev.map(msg =>
+        msg.id === messageId ? { ...msg, status } : msg
+      );
+      saveSessionMessages(updated);
+      return updated;
+    });
+  }, []);
+
+  // Load a historical thread and continue it
   const loadThread = useCallback((threadId) => {
+    console.log('[useThreads] loadThread called with:', threadId);
     setCurrentThreadId(threadId);
+    // Set activeThreadId so new messages continue this conversation
+    setActiveThreadId(threadId);
+    saveActiveThreadId(threadId);
+    // Clear session messages since we're now continuing a historical thread
+    setSessionMessages([]);
+    saveSessionMessages([]);
+    console.log('[useThreads] activeThreadId set to:', threadId);
   }, []);
 
   // Start a new thread (clear session and deselect historical thread)
@@ -156,6 +282,11 @@ export function useThreads() {
     setCurrentThreadId(null);
     setSessionMessages([]);
     saveSessionMessages([]);
+    // Generate new thread ID for the new conversation
+    const newThreadId = generateThreadId();
+    setActiveThreadId(newThreadId);
+    saveActiveThreadId(newThreadId);
+    console.log('Started new thread:', newThreadId);
   }, []);
 
   // Clear current session messages
@@ -184,9 +315,11 @@ export function useThreads() {
     currentThread,
     messages,
     sessionMessages,
+    activeThreadId, // Thread ID for API calls
     isLoading,
     hasHistory,
     addMessage,
+    updateMessageStatus,
     loadThread,
     createNewThread,
     clearCurrentThread,

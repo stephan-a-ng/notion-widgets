@@ -1,7 +1,27 @@
-import React from 'react';
-import { Clock, MessageSquare, Plus, X, ChevronRight, Loader2, RefreshCw } from 'lucide-react';
+import React, { useRef, useEffect } from 'react';
+import { Clock, MessageSquare, Plus, X, ChevronRight, Loader2, RefreshCw, ArrowLeft } from 'lucide-react';
 
 export function ThreadBrowser({ threads, currentThreadId, onSelect, onNewThread, onClose, isLoading, onRefresh }) {
+  const contentRef = useRef(null);
+
+  // Handle Escape key to close
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.code === 'Escape') {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  // Handle click outside to close
+  const handleBackdropClick = (e) => {
+    if (contentRef.current && !contentRef.current.contains(e.target)) {
+      onClose();
+    }
+  };
   const formatDate = (date) => {
     const now = new Date();
     const diff = now - date;
@@ -20,105 +40,109 @@ export function ThreadBrowser({ threads, currentThreadId, onSelect, onNewThread,
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/95 backdrop-blur-xl flex flex-col animate-in fade-in duration-300"
+      className="fixed inset-0 z-50 bg-black/90 backdrop-blur-xl flex flex-col items-center justify-start p-6 overflow-y-auto animate-in fade-in duration-300"
       data-no-touch-talk
+      onClick={handleBackdropClick}
     >
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-white/10">
-        <h2 className="text-lg font-medium text-white flex items-center gap-2">
-          <Clock className="w-5 h-5 text-zinc-400" />
-          Conversation History
-        </h2>
-        <div className="flex items-center gap-2">
-          {onRefresh && (
+      {/* Content container - matches ThreadHistory width */}
+      <div ref={contentRef} className="w-full max-w-2xl flex flex-col gap-4">
+        {/* Header */}
+        <div className="flex items-center justify-between px-2">
+          <div className="flex items-center gap-2 text-zinc-500 text-xs font-bold uppercase tracking-widest">
+            <Clock className="w-3 h-3" />
+            Conversation History
+          </div>
+          <div className="flex items-center gap-1">
+            {onRefresh && (
+              <button
+                onClick={onRefresh}
+                className={`flex items-center gap-1.5 text-xs text-zinc-500 hover:text-white transition-colors px-3 py-1.5 rounded-lg hover:bg-white/5 ${isLoading ? 'animate-spin' : ''}`}
+                disabled={isLoading}
+              >
+                <RefreshCw className="w-3 h-3" />
+              </button>
+            )}
             <button
-              onClick={onRefresh}
-              className={`p-2 text-zinc-400 hover:text-white transition-colors ${isLoading ? 'animate-spin' : ''}`}
-              disabled={isLoading}
+              onClick={onNewThread}
+              className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-green-400 transition-colors px-3 py-1.5 rounded-lg hover:bg-white/5"
             >
-              <RefreshCw className="w-5 h-5" />
+              <Plus className="w-3 h-3" />
+              New
             </button>
-          )}
-          <button
-            onClick={onClose}
-            className="p-2 text-zinc-400 hover:text-white transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+            <button
+              onClick={onClose}
+              className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-white transition-colors px-3 py-1.5 rounded-lg hover:bg-white/5"
+            >
+              <ArrowLeft className="w-3 h-3" />
+              Back
+            </button>
+          </div>
         </div>
-      </div>
 
-      {/* New Thread Button */}
-      <div className="p-4 border-b border-white/10">
-        <button
-          onClick={() => {
-            onNewThread();
-            onClose();
-          }}
-          className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/30 rounded-xl text-blue-400 transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          New Conversation
-        </button>
-      </div>
-
-      {/* Thread List */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-2">
+        {/* Thread List */}
         {isLoading && threads.length === 0 ? (
           <div className="text-center text-zinc-500 py-12">
             <Loader2 className="w-8 h-8 mx-auto mb-4 animate-spin" />
-            <p>Loading conversations...</p>
+            <p className="text-sm">Loading conversations...</p>
           </div>
         ) : threads.length === 0 ? (
-          <div className="text-center text-zinc-500 py-12">
-            <MessageSquare className="w-12 h-12 mx-auto mb-4 opacity-50" />
-            <p>No conversations yet</p>
-            <p className="text-sm mt-1">Your conversations will appear here</p>
+          <div className="text-center text-zinc-600 py-8">
+            <MessageSquare className="w-8 h-8 mx-auto mb-3 opacity-50" />
+            <p className="text-sm">No conversations yet</p>
+            <p className="text-xs mt-1 text-zinc-700">Your conversations will appear here</p>
           </div>
         ) : (
-          threads.map((thread, index) => (
-            <div
-              key={thread.id}
-              className={`
-                group relative rounded-xl border transition-all cursor-pointer
-                animate-in fade-in slide-in-from-bottom-2 fill-mode-backwards
-                ${thread.id === currentThreadId
-                  ? 'bg-white/10 border-white/20'
-                  : 'bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/15'
-                }
-              `}
-              style={{ animationDelay: `${index * 30}ms` }}
-              onClick={() => {
-                onSelect(thread.id);
-                onClose();
-              }}
-            >
-              <div className="p-4 pr-12">
-                <div className="flex items-start justify-between gap-3">
+          <div className="flex flex-col gap-2">
+            {threads.map((thread, index) => (
+              <div
+                key={thread.id}
+                className={`
+                  group p-4 rounded-2xl border backdrop-blur-sm cursor-pointer
+                  animate-in fade-in slide-in-from-bottom-4 fill-mode-backwards
+                  transition-colors
+                  ${thread.id === currentThreadId
+                    ? 'bg-blue-500/10 border-blue-500/20'
+                    : 'bg-white/5 hover:bg-white/10 border-white/10'
+                  }
+                `}
+                style={{ animationDelay: `${index * 30}ms` }}
+                onClick={() => {
+                  onSelect(thread.id);
+                  onClose();
+                }}
+              >
+                <div className="flex items-start gap-3">
                   <div className="flex-1 min-w-0">
-                    {/* User's question */}
-                    <p className="text-white font-medium line-clamp-2">
-                      {thread.requestText || thread.title}
+                    {/* Thread name or first message */}
+                    <p className="text-base font-medium text-white line-clamp-1">
+                      {thread.title}
                     </p>
+                    {/* Show first message as subtitle if thread has custom name */}
+                    {thread.hasCustomName && thread.requestText && (
+                      <p className="mt-1 text-sm text-zinc-500 line-clamp-1">
+                        {thread.requestText}
+                      </p>
+                    )}
                     {/* AI response preview */}
                     {thread.responseText && (
-                      <p className="mt-2 text-sm text-zinc-400 line-clamp-2">
+                      <p className="mt-1.5 text-sm text-zinc-400 line-clamp-2">
                         {thread.responseText}
                       </p>
                     )}
-                    <div className="flex items-center gap-3 mt-2 text-xs text-zinc-500">
-                      <span>{formatDate(thread.createdAt)}</span>
+                    <div className="flex items-center gap-2 mt-2 text-xs text-zinc-500">
+                      <span>{formatDate(thread.lastMessageAt || thread.createdAt)}</span>
+                      {thread.messageCount > 1 && (
+                        <span className="px-2 py-0.5 bg-white/10 rounded text-zinc-400">
+                          {thread.messageCount} msgs
+                        </span>
+                      )}
                     </div>
                   </div>
+                  <ChevronRight className="w-4 h-4 text-zinc-600 group-hover:text-zinc-400 transition-colors shrink-0 mt-1" />
                 </div>
               </div>
-
-              {/* Chevron indicator */}
-              <div className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-600 group-hover:text-zinc-400 transition-colors">
-                <ChevronRight className="w-5 h-5" />
-              </div>
-            </div>
-          ))
+            ))}
+          </div>
         )}
       </div>
     </div>

@@ -11,6 +11,12 @@ export function useSpeechRecognition({ onSessionEnd }) {
   const recognitionRef = useRef(null);
   const transcriptRef = useRef('');
   const interimTranscriptRef = useRef('');
+  const onSessionEndRef = useRef(onSessionEnd);
+
+  // Keep the ref updated with the latest callback
+  useEffect(() => {
+    onSessionEndRef.current = onSessionEnd;
+  }, [onSessionEnd]);
 
   // Sync refs
   useEffect(() => {
@@ -48,8 +54,8 @@ export function useSpeechRecognition({ onSessionEnd }) {
 
         recognition.onend = () => {
           setIsListening(false);
-          if (onSessionEnd) {
-            onSessionEnd(transcriptRef.current, interimTranscriptRef.current);
+          if (onSessionEndRef.current) {
+            onSessionEndRef.current(transcriptRef.current, interimTranscriptRef.current);
           }
         };
 
@@ -82,7 +88,7 @@ export function useSpeechRecognition({ onSessionEnd }) {
         recognitionRef.current.stop();
       }
     };
-  }, [onSessionEnd]);
+  }, []); // Empty deps - recognition is initialized once, callback is accessed via ref
 
   const start = useCallback(() => {
     if (!recognitionRef.current) return;

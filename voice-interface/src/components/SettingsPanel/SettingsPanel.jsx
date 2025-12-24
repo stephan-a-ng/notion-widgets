@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { Settings, Palette } from 'lucide-react';
+import { Settings, Palette, Lock } from 'lucide-react';
 import { DeviceSelector } from './DeviceSelector';
 
 export function SettingsPanel({
@@ -10,7 +10,9 @@ export function SettingsPanel({
   onThemeClick,
   audioDevices,
   selectedDeviceId,
-  onDeviceChange
+  onDeviceChange,
+  lockoutEnabled,
+  onToggleLockout
 }) {
   const settingsRef = useRef(null);
 
@@ -56,6 +58,38 @@ export function SettingsPanel({
             selectedDeviceId={selectedDeviceId}
             onDeviceChange={onDeviceChange}
           />
+
+          {/* Lockout Toggle */}
+          <div className="p-3 border-t border-white/10">
+            <button
+              onClick={onToggleLockout}
+              className="w-full flex items-center justify-between p-3 rounded-xl bg-white/5 hover:bg-white/10 transition-colors group"
+            >
+              <div className="flex items-center gap-3">
+                <Lock className="w-4 h-4 text-zinc-400 group-hover:text-white" />
+                <div className="text-left">
+                  <div className="text-sm font-medium text-zinc-200">Passphrase Lock</div>
+                  <div className="text-xs text-zinc-500">
+                    {lockoutEnabled ? 'Enabled on startup' : 'Disabled'}
+                  </div>
+                </div>
+              </div>
+              {/* Toggle switch */}
+              <div
+                className={`
+                  relative w-10 h-6 rounded-full transition-colors
+                  ${lockoutEnabled ? 'bg-green-500' : 'bg-zinc-700'}
+                `}
+              >
+                <div
+                  className={`
+                    absolute top-1 w-4 h-4 rounded-full bg-white transition-transform
+                    ${lockoutEnabled ? 'translate-x-5' : 'translate-x-1'}
+                  `}
+                />
+              </div>
+            </button>
+          </div>
         </div>
       )}
     </div>

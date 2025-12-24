@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { THEMES, DEFAULT_THEME } from './config/themes';
-import { PENDING_SUBMIT_DELAY_MS, PREFETCH_DELAY_MS } from './config/constants';
+import { PENDING_SUBMIT_DELAY_MS } from './config/constants';
 import { addPunctuation, isIncompleteSentence } from './utils/transcriptFormatter';
 import {
   useScrollCompact,
@@ -57,9 +57,11 @@ export default function App() {
   const {
     threads,
     currentThreadId,
+    activeThreadId,
     messages,
     hasHistory,
     addMessage,
+    updateMessageStatus,
     loadThread,
     clearCurrentThread,
     createNewThread,
@@ -82,10 +84,9 @@ export default function App() {
 
   // Refs for timers
   const pendingSubmitTimerRef = useRef(null);
-  const preFetchTimerRef = useRef(null);
 
   // Custom hooks
-  const { isLocked, unlockStatus, lockoutCountdown, attemptUnlock, isInputBlocked } = useLockout();
+  const { isLocked, unlockStatus, lockoutCountdown, attemptUnlock, isInputBlocked, lockoutEnabled, toggleLockoutEnabled } = useLockout();
   const isCompact = useScrollCompact(isLocked);
   const { audioDevices, selectedDeviceId, getAudioDevices, handleDeviceChange } = useAudioDevices();
   const usageData = useUsageData();
@@ -100,7 +101,7 @@ export default function App() {
   });
 
   // Commit message handler
-  const commitMessage = useCallback(async (textToCommit) => {
+  const commitMessage = useCallback(async (textToCommit, skipPreFetch = false) => {
     if (!textToCommit || !textToCommit.trim()) {
       setMode('idle');
       return;
@@ -115,12 +116,14 @@ export default function App() {
       return;
     }
 
-    // Add user message to local session
+    // Add user message to local session with pending status
+    const messageId = Date.now();
     const userMessage = {
-      id: Date.now(),
+      id: messageId,
       text: finalText,
       timestamp: new Date(),
-      role: 'user'
+      role: 'user',
+      status: 'pending' // Will be updated to 'confirmed' when Airtable confirms
     };
     addMessage(userMessage);
     setEditText('');
@@ -128,8 +131,20 @@ export default function App() {
     // Show thinking state while waiting for response
     setMode('thinking');
 
+    // Reset cancellation flag (important for edit mode where cancelPendingAudio was called)
+    resetCancellation();
+
+    // If preFetch wasn't already called (e.g., from edit mode), call it now
+    if (!skipPreFetch) {
+      console.log('[App] commitMessage calling preFetchBotResponse with threadId:', activeThreadId);
+      preFetchBotResponse(activeThreadId, finalText);
+    }
+
     // Play audio response (waits for Tasklet + ElevenLabs)
     const responseText = await playAudioResponse();
+
+    // Mark user message as confirmed (we got a response, so Airtable has the record)
+    updateMessageStatus(messageId, 'confirmed');
 
     // Add assistant response to local session
     if (responseText) {
@@ -147,7 +162,7 @@ export default function App() {
 
     // Only go back to idle after response completes
     setMode('idle');
-  }, [isLocked, attemptUnlock, playAudioResponse, addMessage, refreshThreads]);
+  }, [isLocked, attemptUnlock, activeThreadId, preFetchBotResponse, playAudioResponse, addMessage, updateMessageStatus, refreshThreads, resetCancellation]);
 
   // Handle session end (called by speech recognition)
   const handleSessionEnd = useCallback((transcript, interimTranscript) => {
@@ -174,16 +189,12 @@ export default function App() {
 
     if (pendingSubmitTimerRef.current) clearTimeout(pendingSubmitTimerRef.current);
     pendingSubmitTimerRef.current = setTimeout(() => {
-      commitMessage(finalText);
+      // Only send to Tasklet when actually committing (not during pending state)
+      // This prevents double submissions when user edits
+      commitMessage(finalText, false);
       speechRecognition.reset();
     }, PENDING_SUBMIT_DELAY_MS);
-
-    // Pre-fetch response from Tasklet if unlocked
-    if (!isLocked) {
-      if (preFetchTimerRef.current) clearTimeout(preFetchTimerRef.current);
-      preFetchTimerRef.current = setTimeout(() => preFetchBotResponse(finalText), PREFETCH_DELAY_MS);
-    }
-  }, [isLocked, commitMessage, preFetchBotResponse, resetCancellation]);
+  }, [isLocked, commitMessage, resetCancellation]);
 
   const speechRecognition = useSpeechRecognition({ onSessionEnd: handleSessionEnd });
 
@@ -202,7 +213,6 @@ export default function App() {
   const cancelMessage = useCallback(() => {
     cancelPendingAudio();
     if (pendingSubmitTimerRef.current) clearTimeout(pendingSubmitTimerRef.current);
-    if (preFetchTimerRef.current) clearTimeout(preFetchTimerRef.current);
     speechRecognition.reset();
     setEditText('');
     setMode('idle');
@@ -211,10 +221,16 @@ export default function App() {
   const enterEditMode = useCallback(() => {
     cancelPendingAudio();
     if (pendingSubmitTimerRef.current) clearTimeout(pendingSubmitTimerRef.current);
-    if (preFetchTimerRef.current) clearTimeout(preFetchTimerRef.current);
     setEditText(speechRecognition.transcript);
     setMode('editing');
   }, [cancelPendingAudio, speechRecognition.transcript]);
+
+  // Open text input mode (type instead of speak)
+  const openTextInput = useCallback(() => {
+    if (isInputBlocked) return;
+    setEditText('');
+    setMode('editing');
+  }, [isInputBlocked]);
 
   const handleOrbClick = useCallback(() => {
     if (isInputBlocked) return;
@@ -245,7 +261,8 @@ export default function App() {
     onEnterEditMode: enterEditMode,
     onCancelMessage: cancelMessage,
     onCommitMessage: handleCommitFromEdit,
-    onCloseThemeSelector: () => setShowThemeSelector(false)
+    onCloseThemeSelector: () => setShowThemeSelector(false),
+    onOpenTextInput: openTextInput
   });
 
   return (
@@ -259,9 +276,9 @@ export default function App() {
         />
       </div>
 
-      {/* Settings Button and Usage Indicator (Hidden when locked or viewing thread browser) */}
+      {/* Settings Button (Hidden when locked or viewing thread browser) */}
       {!isLocked && !showThreadBrowser && (
-        <div className="fixed top-6 right-6 z-[60] flex flex-col items-center gap-3">
+        <div className="fixed top-6 right-6 z-[60]">
           <SettingsPanel
             isOpen={isSettingsOpen && !showThemeSelector}
             onToggle={() => setIsSettingsOpen(!isSettingsOpen)}
@@ -271,16 +288,22 @@ export default function App() {
             audioDevices={audioDevices}
             selectedDeviceId={selectedDeviceId}
             onDeviceChange={handleDeviceChange}
-          />
-          <UsageIndicator
-            percentage={usageData.percentage}
-            refreshEpoch={usageData.refreshEpoch}
-            history={usageData.history}
-            healthStatus={usageData.healthStatus}
-            isLoading={usageData.isLoading}
-            justUpdated={usageData.justUpdated}
+            lockoutEnabled={lockoutEnabled}
+            onToggleLockout={toggleLockoutEnabled}
           />
         </div>
+      )}
+
+      {/* Usage Indicator - slides from right edge (Hidden when locked or viewing thread browser) */}
+      {!isLocked && !showThreadBrowser && (
+        <UsageIndicator
+          percentage={usageData.percentage}
+          refreshEpoch={usageData.refreshEpoch}
+          history={usageData.history}
+          healthStatus={usageData.healthStatus}
+          isLoading={usageData.isLoading}
+          justUpdated={usageData.justUpdated}
+        />
       )}
 
       {/* Full Screen Theme Selector */}
@@ -323,6 +346,7 @@ export default function App() {
             onClear={clearCurrentThread}
             onShowHistory={() => setShowThreadBrowser(true)}
             onNewThread={createNewThread}
+            onTextInput={openTextInput}
             hasHistory={hasHistory}
             isViewingHistory={!!currentThreadId}
           />

@@ -1,12 +1,56 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { AIRTABLE_TELEMETRY_URL, AIRTABLE_TOKEN } from '../config/constants';
 
+const USAGE_CACHE_KEY = 'voice-interface-usage-cache';
+
+// Load cached usage data from localStorage
+function loadCachedUsageData() {
+  try {
+    const cached = localStorage.getItem(USAGE_CACHE_KEY);
+    if (cached) {
+      const data = JSON.parse(cached);
+      return {
+        percentage: data.percentage || 0,
+        refreshEpoch: data.refreshEpoch ? new Date(data.refreshEpoch) : null,
+        history: (data.history || []).map(h => ({
+          ...h,
+          timestamp: new Date(h.timestamp)
+        })),
+        isLoading: false
+      };
+    }
+  } catch (e) {
+    console.error('Failed to load cached usage data:', e);
+  }
+  return null;
+}
+
+// Save usage data to localStorage
+function saveCachedUsageData(data) {
+  try {
+    localStorage.setItem(USAGE_CACHE_KEY, JSON.stringify({
+      percentage: data.percentage,
+      refreshEpoch: data.refreshEpoch?.toISOString(),
+      history: data.history.map(h => ({
+        percentage: h.percentage,
+        timestamp: h.timestamp.toISOString()
+      }))
+    }));
+  } catch (e) {
+    console.error('Failed to save usage cache:', e);
+  }
+}
+
 export function useUsageData() {
-  const [usageData, setUsageData] = useState({
-    percentage: 0,
-    refreshEpoch: null,
-    history: [],
-    isLoading: true
+  // Initialize with cached data or defaults (not loading state)
+  const [usageData, setUsageData] = useState(() => {
+    const cached = loadCachedUsageData();
+    return cached || {
+      percentage: 0,
+      refreshEpoch: null,
+      history: [],
+      isLoading: false
+    };
   });
   const [justUpdated, setJustUpdated] = useState(false);
   const previousPercentageRef = useRef(null);
@@ -19,9 +63,9 @@ export function useUsageData() {
     }
 
     try {
-      // Fetch records with usage data, sorted by created time descending
+      // Fetch telemetry records - table uses key-value format with Mnemonics and Value fields
       const response = await fetch(
-        `${AIRTABLE_TELEMETRY_URL}?sort[0][field]=Created&sort[0][direction]=desc&maxRecords=100`,
+        `${AIRTABLE_TELEMETRY_URL}?maxRecords=100`,
         {
           headers: {
             'Authorization': `Bearer ${AIRTABLE_TOKEN}`
@@ -37,15 +81,23 @@ export function useUsageData() {
       console.log('Telemetry response:', data);
 
       if (data.records && data.records.length > 0) {
-        // Get the most recent record with usage data
-        const latestWithUsage = data.records.find(r =>
-          r.fields['TASKLET_USAGE_PERCENTAGE'] !== undefined
-        );
+        // Separate records by mnemonic type and sort by created time
+        const usageRecords = data.records
+          .filter(r => r.fields['Mnemonics'] === 'TASKLET_USAGE_PERCENTAGE')
+          .sort((a, b) => new Date(b.createdTime) - new Date(a.createdTime));
 
-        if (latestWithUsage) {
-          const newPercentage = latestWithUsage.fields['TASKLET_USAGE_PERCENTAGE'] || 0;
-          const refreshEpoch = latestWithUsage.fields['TASKLET_REFRESH_EPOCH'];
-          const refreshDate = refreshEpoch ? new Date(refreshEpoch * 1000) : null;
+        const epochRecords = data.records
+          .filter(r => r.fields['Mnemonics'] === 'TASKLET_REFRESH_EPOCH')
+          .sort((a, b) => new Date(b.createdTime) - new Date(a.createdTime));
+
+        // Get latest values
+        const latestUsage = usageRecords[0];
+        const latestEpoch = epochRecords[0];
+
+        if (latestUsage) {
+          const newPercentage = latestUsage.fields['Value'] || 0;
+          const refreshEpochValue = latestEpoch?.fields['Value'];
+          const refreshDate = refreshEpochValue ? new Date(refreshEpochValue * 1000) : null;
 
           // Check if percentage changed - trigger pulse
           if (previousPercentageRef.current !== null &&
@@ -55,28 +107,26 @@ export function useUsageData() {
           }
           previousPercentageRef.current = newPercentage;
 
-          // Get all records since the last refresh for history
-          const history = data.records
-            .filter(r => {
-              if (r.fields['TASKLET_USAGE_PERCENTAGE'] === undefined) return false;
-              if (!refreshEpoch) return true;
-              const recordTime = new Date(r.createdTime).getTime() / 1000;
-              return recordTime >= refreshEpoch;
-            })
+          // Get all usage records for history (component will filter by period)
+          const history = usageRecords
             .map(r => ({
-              percentage: r.fields['TASKLET_USAGE_PERCENTAGE'],
+              percentage: r.fields['Value'],
               timestamp: new Date(r.createdTime)
             }))
             .reverse(); // Oldest first for graphing
 
-          setUsageData({
+          const newData = {
             percentage: newPercentage,
             refreshEpoch: refreshDate,
             history,
             isLoading: false
-          });
+          };
+          setUsageData(newData);
+          saveCachedUsageData(newData);
+
+          console.log('Usage data:', { percentage: newPercentage, refreshDate, historyCount: history.length });
         } else {
-          console.log('No records with TASKLET_USAGE_PERCENTAGE found');
+          console.log('No TASKLET_USAGE_PERCENTAGE records found');
           setUsageData(prev => ({ ...prev, isLoading: false }));
         }
       } else {

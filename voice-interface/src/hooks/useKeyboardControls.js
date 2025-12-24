@@ -20,7 +20,8 @@ export function useKeyboardControls({
   onEnterEditMode,
   onCancelMessage,
   onCommitMessage,
-  onCloseThemeSelector
+  onCloseThemeSelector,
+  onOpenTextInput
 }) {
   const modeRef = useRef(mode);
   const touchActiveRef = useRef(false);
@@ -29,7 +30,7 @@ export function useKeyboardControls({
     modeRef.current = mode;
   }, [mode]);
 
-  // Space key for push-to-talk
+  // Space key for push-to-talk, T key for text input
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.code === 'Space') {
@@ -38,6 +39,11 @@ export function useKeyboardControls({
         if (!isInputBlocked && !e.repeat && modeRef.current === 'idle') {
           onStartSession();
         }
+      }
+      // T key opens text input mode
+      if (e.code === 'KeyT' && !e.repeat && modeRef.current === 'idle' && !isInputBlocked) {
+        e.preventDefault();
+        onOpenTextInput?.();
       }
     };
 
@@ -57,7 +63,7 @@ export function useKeyboardControls({
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [isInputBlocked, onStartSession, onEndSession]);
+  }, [isInputBlocked, onStartSession, onEndSession, onOpenTextInput]);
 
   // Touch for push-to-talk (mobile support)
   useEffect(() => {

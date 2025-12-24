@@ -7,8 +7,33 @@ import {
 } from '../config/constants';
 import { speakWithElevenLabs } from '../utils/elevenLabsTTS';
 
+const LOCKOUT_ENABLED_KEY = 'voice-interface-lockout-enabled';
+
+// Load lockout enabled preference from localStorage
+function loadLockoutEnabled() {
+  try {
+    const stored = localStorage.getItem(LOCKOUT_ENABLED_KEY);
+    // Default to false (disabled) if not set
+    return stored === 'true';
+  } catch (e) {
+    return false;
+  }
+}
+
+// Save lockout enabled preference
+function saveLockoutEnabled(enabled) {
+  try {
+    localStorage.setItem(LOCKOUT_ENABLED_KEY, enabled ? 'true' : 'false');
+  } catch (e) {
+    console.error('Failed to save lockout preference:', e);
+  }
+}
+
 export function useLockout() {
-  const [isLocked, setIsLocked] = useState(true);
+  // Check if lockout is enabled in preferences
+  const [lockoutEnabled, setLockoutEnabled] = useState(() => loadLockoutEnabled());
+  // Start unlocked if lockout is disabled
+  const [isLocked, setIsLocked] = useState(() => loadLockoutEnabled());
   const [unlockAttempts, setUnlockAttempts] = useState(0);
   const [unlockStatus, setUnlockStatus] = useState('idle'); // 'idle', 'level1', 'level2', 'lockout'
   const [lockoutCountdown, setLockoutCountdown] = useState(0);
@@ -70,12 +95,21 @@ export function useLockout() {
 
   const isInputBlocked = unlockStatus !== 'idle';
 
+  // Toggle lockout enabled (takes effect on next app open)
+  const toggleLockoutEnabled = useCallback(() => {
+    const newValue = !lockoutEnabled;
+    setLockoutEnabled(newValue);
+    saveLockoutEnabled(newValue);
+  }, [lockoutEnabled]);
+
   return {
     isLocked,
     unlockStatus,
     unlockAttempts,
     lockoutCountdown,
     attemptUnlock,
-    isInputBlocked
+    isInputBlocked,
+    lockoutEnabled,
+    toggleLockoutEnabled
   };
 }

@@ -11,17 +11,13 @@ import {
 import { speakWithElevenLabs } from '../utils/elevenLabsTTS';
 import { getRandomThinkingPhrase } from '../utils/thinkingPhrases';
 
-// Generate unique thread ID
-function generateThreadId() {
-  return `thread_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-}
-
 export function useAudioOutput({ onApiError }) {
   const pendingResponseRef = useRef(null);
   const isResponseCancelledRef = useRef(false);
 
   // Send message to Tasklet webhook
   const sendToTasklet = useCallback(async (threadId, userMessage) => {
+    console.log('[useAudioOutput] sendToTasklet with threadId:', threadId);
     try {
       const response = await fetch(TASKLET_WEBHOOK_URL, {
         method: 'POST',
@@ -45,10 +41,14 @@ export function useAudioOutput({ onApiError }) {
     }
   }, []);
 
-  // Poll Airtable for response
-  const pollAirtable = useCallback(async (threadId) => {
+  // Poll Airtable for response - matches both thread ID and request text
+  const pollAirtable = useCallback(async (threadId, requestText) => {
     const startTime = Date.now();
-    const encodedFormula = encodeURIComponent(`{Job ID}='${threadId}'`);
+    // Escape single quotes in request text for Airtable formula
+    const escapedText = requestText.replace(/'/g, "\\'");
+    // Filter by both Job ID and Request Text to find the specific record
+    const formula = `AND({Job ID}='${threadId}', {Request Text}='${escapedText}')`;
+    const encodedFormula = encodeURIComponent(formula);
 
     while (Date.now() - startTime < POLL_TIMEOUT_MS) {
       if (isResponseCancelledRef.current) {
@@ -92,9 +92,7 @@ export function useAudioOutput({ onApiError }) {
   }, []);
 
   // Fetch response from Tasklet + Airtable
-  const fetchTaskletResponse = useCallback(async (userMessage) => {
-    const threadId = generateThreadId();
-
+  const fetchTaskletResponse = useCallback(async (threadId, userMessage) => {
     // Play thinking phrase immediately
     const thinkingPhrase = getRandomThinkingPhrase();
     speakWithElevenLabs(thinkingPhrase);
@@ -105,8 +103,8 @@ export function useAudioOutput({ onApiError }) {
       return null;
     }
 
-    // Poll Airtable for response
-    const responseText = await pollAirtable(threadId);
+    // Poll Airtable for response - match both thread ID and request text
+    const responseText = await pollAirtable(threadId, userMessage);
     return responseText;
   }, [sendToTasklet, pollAirtable]);
 
@@ -144,8 +142,8 @@ export function useAudioOutput({ onApiError }) {
   }, [onApiError]);
 
   // Pre-fetch bot response from Tasklet (called during pending state)
-  const preFetchBotResponse = useCallback((userMessage) => {
-    pendingResponseRef.current = fetchTaskletResponse(userMessage).then(async (responseText) => {
+  const preFetchBotResponse = useCallback((threadId, userMessage) => {
+    pendingResponseRef.current = fetchTaskletResponse(threadId, userMessage).then(async (responseText) => {
       if (!responseText) return { audio: null, text: 'Sorry, I couldn\'t get a response.' };
       const audio = await fetchBotAudio(responseText);
       return { audio, text: responseText };
