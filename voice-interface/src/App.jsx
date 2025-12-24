@@ -65,20 +65,32 @@ export default function App() {
       return;
     }
 
-    // Standard flow - add message
-    const newMessage = {
+    // Standard flow - add user message
+    const userMessage = {
       id: Date.now(),
       text: finalText,
-      timestamp: new Date()
+      timestamp: new Date(),
+      role: 'user'
     };
-    setMessages(prev => [newMessage, ...prev]);
+    setMessages(prev => [userMessage, ...prev]);
     setEditText('');
 
     // Show thinking state while waiting for response
     setMode('thinking');
 
     // Play audio response (waits for Tasklet + ElevenLabs)
-    await playAudioResponse();
+    const responseText = await playAudioResponse();
+
+    // Add assistant response to thread history
+    if (responseText) {
+      const assistantMessage = {
+        id: Date.now() + 1,
+        text: responseText,
+        timestamp: new Date(),
+        role: 'assistant'
+      };
+      setMessages(prev => [assistantMessage, ...prev]);
+    }
 
     // Only go back to idle after response completes
     setMode('idle');

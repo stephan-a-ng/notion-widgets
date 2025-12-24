@@ -152,9 +152,9 @@ export function useAudioOutput({ onApiError }) {
     });
   }, [fetchTaskletResponse, fetchBotAudio]);
 
-  // Play the audio response
+  // Play the audio response and return the response text
   const playAudioResponse = useCallback(async (fallbackText = 'Got it.') => {
-    if (isResponseCancelledRef.current) return;
+    if (isResponseCancelledRef.current) return null;
 
     let audioData = null;
     let responseText = fallbackText;
@@ -186,6 +186,9 @@ export function useAudioOutput({ onApiError }) {
     } else {
       playFallback();
     }
+
+    // Return the response text so it can be added to thread history
+    return responseText;
   }, []);
 
   const cancelPendingAudio = useCallback(() => {
