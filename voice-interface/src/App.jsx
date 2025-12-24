@@ -259,8 +259,8 @@ export default function App() {
         />
       </div>
 
-      {/* Settings Button and Usage Indicator (Hidden when locked) */}
-      {!isLocked && (
+      {/* Settings Button and Usage Indicator (Hidden when locked or viewing thread browser) */}
+      {!isLocked && !showThreadBrowser && (
         <div className="fixed top-6 right-6 z-[60] flex flex-col items-center gap-3">
           <SettingsPanel
             isOpen={isSettingsOpen && !showThemeSelector}
@@ -278,6 +278,7 @@ export default function App() {
             history={usageData.history}
             healthStatus={usageData.healthStatus}
             isLoading={usageData.isLoading}
+            justUpdated={usageData.justUpdated}
           />
         </div>
       )}

@@ -1,5 +1,5 @@
-import { useState, useCallback, useEffect } from 'react';
-import { AIRTABLE_API_URL, AIRTABLE_TOKEN } from '../config/constants';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { AIRTABLE_TELEMETRY_URL, AIRTABLE_TOKEN } from '../config/constants';
 
 export function useUsageData() {
   const [usageData, setUsageData] = useState({
@@ -8,16 +8,20 @@ export function useUsageData() {
     history: [],
     isLoading: true
   });
+  const [justUpdated, setJustUpdated] = useState(false);
+  const previousPercentageRef = useRef(null);
 
   const fetchUsageData = useCallback(async () => {
-    if (!AIRTABLE_API_URL || !AIRTABLE_TOKEN) {
+    if (!AIRTABLE_TELEMETRY_URL || !AIRTABLE_TOKEN) {
+      console.warn('Airtable telemetry not configured');
+      setUsageData(prev => ({ ...prev, isLoading: false }));
       return;
     }
 
     try {
       // Fetch records with usage data, sorted by created time descending
       const response = await fetch(
-        `${AIRTABLE_API_URL}?sort[0][field]=Created&sort[0][direction]=desc&maxRecords=100`,
+        `${AIRTABLE_TELEMETRY_URL}?sort[0][field]=Created&sort[0][direction]=desc&maxRecords=100`,
         {
           headers: {
             'Authorization': `Bearer ${AIRTABLE_TOKEN}`
@@ -30,6 +34,7 @@ export function useUsageData() {
       }
 
       const data = await response.json();
+      console.log('Telemetry response:', data);
 
       if (data.records && data.records.length > 0) {
         // Get the most recent record with usage data
@@ -38,13 +43,22 @@ export function useUsageData() {
         );
 
         if (latestWithUsage) {
+          const newPercentage = latestWithUsage.fields['TASKLET_USAGE_PERCENTAGE'] || 0;
           const refreshEpoch = latestWithUsage.fields['TASKLET_REFRESH_EPOCH'];
           const refreshDate = refreshEpoch ? new Date(refreshEpoch * 1000) : null;
+
+          // Check if percentage changed - trigger pulse
+          if (previousPercentageRef.current !== null &&
+              previousPercentageRef.current !== newPercentage) {
+            setJustUpdated(true);
+            setTimeout(() => setJustUpdated(false), 1500);
+          }
+          previousPercentageRef.current = newPercentage;
 
           // Get all records since the last refresh for history
           const history = data.records
             .filter(r => {
-              if (!r.fields['TASKLET_USAGE_PERCENTAGE']) return false;
+              if (r.fields['TASKLET_USAGE_PERCENTAGE'] === undefined) return false;
               if (!refreshEpoch) return true;
               const recordTime = new Date(r.createdTime).getTime() / 1000;
               return recordTime >= refreshEpoch;
@@ -56,14 +70,18 @@ export function useUsageData() {
             .reverse(); // Oldest first for graphing
 
           setUsageData({
-            percentage: latestWithUsage.fields['TASKLET_USAGE_PERCENTAGE'] || 0,
+            percentage: newPercentage,
             refreshEpoch: refreshDate,
             history,
             isLoading: false
           });
         } else {
+          console.log('No records with TASKLET_USAGE_PERCENTAGE found');
           setUsageData(prev => ({ ...prev, isLoading: false }));
         }
+      } else {
+        console.log('No telemetry records found');
+        setUsageData(prev => ({ ...prev, isLoading: false }));
       }
     } catch (error) {
       console.error('Failed to fetch usage data:', error);
@@ -122,6 +140,7 @@ export function useUsageData() {
   return {
     ...usageData,
     healthStatus: getHealthStatus(),
+    justUpdated,
     refresh: fetchUsageData
   };
 }

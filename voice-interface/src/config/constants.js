@@ -3,6 +3,7 @@ export const TASKLET_WEBHOOK_URL = import.meta.env.VITE_TASKLET_WEBHOOK_URL;
 
 // Airtable Polling
 export const AIRTABLE_API_URL = import.meta.env.VITE_AIRTABLE_API_URL;
+export const AIRTABLE_TELEMETRY_URL = import.meta.env.VITE_AIRTABLE_TELEMETRY_URL;
 export const AIRTABLE_TOKEN = import.meta.env.VITE_AIRTABLE_TOKEN;
 export const POLL_INTERVAL_MS = 1000;
 export const POLL_TIMEOUT_MS = 120000; // 2 minutes

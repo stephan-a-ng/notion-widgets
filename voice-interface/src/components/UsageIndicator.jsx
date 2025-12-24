@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-export function UsageIndicator({ percentage, refreshEpoch, history, healthStatus, isLoading }) {
+export function UsageIndicator({ percentage, refreshEpoch, history, healthStatus, isLoading, justUpdated }) {
   const [isHovered, setIsHovered] = useState(false);
   const [showGraph, setShowGraph] = useState(false);
 
@@ -85,15 +85,27 @@ export function UsageIndicator({ percentage, refreshEpoch, history, healthStatus
     >
       {/* Small blob indicator */}
       <div className="relative w-4 h-4 cursor-pointer">
-        {/* Glow */}
-        <div className={`absolute inset-0 rounded-full blur-sm ${getStatusGlow()} opacity-50`} />
+        {/* Pulse ring on update */}
+        {justUpdated && (
+          <div
+            className={`absolute inset-0 rounded-full ${getStatusGlow()} animate-ping`}
+            style={{ animationDuration: '1s' }}
+          />
+        )}
+        {/* Glow - larger when just updated */}
+        <div
+          className={`
+            absolute rounded-full blur-sm ${getStatusGlow()} transition-all duration-300
+            ${justUpdated ? 'inset-[-4px] opacity-80' : 'inset-0 opacity-50'}
+          `}
+        />
         {/* Blob */}
         <div
           className={`
             w-full h-full rounded-full
             bg-gradient-to-br ${getStatusColor()}
-            animate-pulse-slow
-            shadow-lg
+            shadow-lg transition-transform duration-300
+            ${justUpdated ? 'scale-125' : 'scale-100'}
           `}
           style={{
             animation: 'blob-idle 4s ease-in-out infinite'

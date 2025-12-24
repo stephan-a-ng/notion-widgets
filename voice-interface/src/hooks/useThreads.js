@@ -67,24 +67,40 @@ export function useThreads() {
       }
 
       const data = await response.json();
-      console.log('Airtable response:', data);
+      console.log('Conversations Airtable response:', data);
+
+      // Log all field names from first record to help debug
+      if (data.records && data.records.length > 0) {
+        console.log('Available fields:', Object.keys(data.records[0].fields));
+      }
 
       if (data.records) {
         // Transform Airtable records into thread format
+        // Try multiple possible field names for flexibility
         const threadList = data.records
-          .filter(record => record.fields['Job Status'] === 'Done')
+          .filter(record => {
+            const status = record.fields['Job Status'] || record.fields['Status'] || record.fields['status'];
+            // Accept Done, done, Completed, completed, or if no status field exists
+            return !status || status === 'Done' || status === 'done' || status === 'Completed' || status === 'completed';
+          })
           .map(record => {
             const fields = record.fields;
+            // Try multiple possible field names
+            const requestText = fields['Request Text'] || fields['request_text'] || fields['text'] || fields['Text'] || fields['input'] || fields['Input'] || fields['message'] || fields['Message'] || '';
+            const responseText = fields['Response Text'] || fields['response_text'] || fields['response'] || fields['Response'] || fields['output'] || fields['Output'] || fields['answer'] || fields['Answer'] || '';
+            const jobId = fields['Job ID'] || fields['job_id'] || fields['id'] || record.id;
+
             return {
               id: record.id,
-              jobId: fields['Job ID'] || record.id,
-              title: (fields['Request Text'] || fields['text'] || 'Conversation').slice(0, 50),
-              requestText: fields['Request Text'] || fields['text'] || '',
-              responseText: fields['Response Text'] || '',
+              jobId: jobId,
+              title: requestText ? requestText.slice(0, 50) : 'Conversation',
+              requestText: requestText,
+              responseText: responseText,
               createdAt: new Date(record.createdTime),
-              status: fields['Job Status']
+              status: fields['Job Status'] || fields['Status'] || 'Done'
             };
-          });
+          })
+          .filter(thread => thread.requestText || thread.responseText); // Only include threads with some content
 
         console.log('Parsed threads:', threadList);
         setThreads(threadList);
