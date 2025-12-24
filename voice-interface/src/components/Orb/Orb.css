@@ -1,0 +1,46 @@
+@keyframes blob-idle {
+  0%, 100% { border-radius: 50% 50% 50% 50% / 50% 50% 50% 50%; transform: scale(1); }
+  33% { border-radius: 55% 45% 50% 50% / 50% 55% 45% 50%; transform: scale(1.02); }
+  66% { border-radius: 45% 55% 45% 55% / 55% 45% 50% 50%; transform: scale(0.98); }
+}
+
+@keyframes blob-active {
+  0% { border-radius: 45% 55% 40% 60% / 55% 45% 60% 40%; transform: scale(1.1) rotate(0deg); }
+  25% { border-radius: 55% 45% 50% 50% / 50% 55% 45% 50%; transform: scale(1.15) rotate(2deg); }
+  50% { border-radius: 40% 60% 55% 45% / 45% 55% 40% 60%; transform: scale(1.05) rotate(-2deg); }
+  75% { border-radius: 55% 45% 45% 55% / 55% 45% 50% 50%; transform: scale(1.12) rotate(1deg); }
+  100% { border-radius: 45% 55% 40% 60% / 55% 45% 60% 40%; transform: scale(1.1) rotate(0deg); }
+}
+
+@keyframes blob-failure {
+  0% { border-radius: 45% 55% 40% 60% / 55% 45% 60% 40%; transform: scale(1.1); }
+  25% { border-radius: 55% 45% 50% 50% / 50% 55% 45% 50%; transform: scale(1.2); }
+  50% { border-radius: 40% 60% 55% 45% / 45% 55% 40% 60%; transform: scale(1.05); }
+  75% { border-radius: 55% 45% 45% 55% / 55% 45% 50% 50%; transform: scale(1.15); }
+  100% { border-radius: 45% 55% 40% 60% / 55% 45% 60% 40%; transform: scale(1.1); }
+}
+
+@keyframes blob-thinking {
+  0% { border-radius: 50% 50% 50% 50% / 50% 50% 50% 50%; transform: scale(1.02); }
+  25% { border-radius: 52% 48% 51% 49% / 49% 51% 48% 52%; transform: scale(1.05); }
+  50% { border-radius: 48% 52% 49% 51% / 51% 49% 52% 48%; transform: scale(1.02); }
+  75% { border-radius: 51% 49% 52% 48% / 48% 52% 49% 51%; transform: scale(1.05); }
+  100% { border-radius: 50% 50% 50% 50% / 50% 50% 50% 50%; transform: scale(1.02); }
+}
+
+@keyframes gradient-move {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes progress-bar {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0%); }
+}
+
+.animate-blob-idle { animation: blob-idle 6s ease-in-out infinite, gradient-move 8s ease infinite; }
+.animate-blob-active { animation: blob-active 2s ease-in-out infinite, gradient-move 3s ease infinite; }
+.animate-blob-thinking { animation: blob-thinking 1.5s ease-in-out infinite, gradient-move 4s ease infinite; }
+.animate-blob-failure { animation: blob-failure 2s ease-in-out infinite, gradient-move 3s ease infinite; }
+.animate-progress-bar { animation: progress-bar 1.3s linear forwards; }
