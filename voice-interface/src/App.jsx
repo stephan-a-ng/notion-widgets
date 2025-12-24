@@ -19,6 +19,7 @@ import {
   TranscriptDisplay,
   ThreadHistory,
   ThreadBrowser,
+  MessageDetailCard,
   EditModal,
   UsageIndicator
 } from './components';
@@ -69,6 +70,7 @@ export default function App() {
     isLoading: isLoadingThreads
   } = useThreads();
   const [showThreadBrowser, setShowThreadBrowser] = useState(false);
+  const [selectedMessage, setSelectedMessage] = useState(null);
 
   // UI State - load theme from localStorage
   const [currentTheme, setCurrentTheme] = useState(() => {
@@ -347,6 +349,7 @@ export default function App() {
             onShowHistory={() => setShowThreadBrowser(true)}
             onNewThread={createNewThread}
             onTextInput={openTextInput}
+            onMessageClick={setSelectedMessage}
             hasHistory={hasHistory}
             isViewingHistory={!!currentThreadId}
           />
@@ -373,6 +376,14 @@ export default function App() {
           onClose={() => setShowThreadBrowser(false)}
           isLoading={isLoadingThreads}
           onRefresh={refreshThreads}
+        />
+      )}
+
+      {/* Message Detail Card */}
+      {selectedMessage && (
+        <MessageDetailCard
+          message={selectedMessage}
+          onClose={() => setSelectedMessage(null)}
         />
       )}
     </div>

@@ -7,5 +7,6 @@ export { EditModal } from './EditModal';
 export { TranscriptDisplay } from './TranscriptDisplay';
 export { ThreadHistory } from './ThreadHistory';
 export { ThreadBrowser } from './ThreadBrowser';
+export { MessageDetailCard } from './MessageDetailCard';
 export { Header } from './Header';
 export { UsageIndicator } from './UsageIndicator';

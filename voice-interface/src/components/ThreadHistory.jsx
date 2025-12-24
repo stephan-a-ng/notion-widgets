@@ -1,7 +1,7 @@
 import React from 'react';
-import { MessageSquare, X, User, Bot, Clock, Plus, ArrowLeft, Keyboard } from 'lucide-react';
+import { MessageSquare, X, User, Bot, Clock, Plus, ArrowLeft, Keyboard, Calendar, Mail } from 'lucide-react';
 
-export function ThreadHistory({ messages, onClear, onShowHistory, onNewThread, onTextInput, hasHistory, isViewingHistory }) {
+export function ThreadHistory({ messages, onClear, onShowHistory, onNewThread, onTextInput, onMessageClick, hasHistory, isViewingHistory }) {
   return (
     <div className="w-full flex flex-col gap-4 animate-in fade-in slide-in-from-bottom-8 duration-700">
       {/* Thread Controls - Always show */}
@@ -55,6 +55,9 @@ export function ThreadHistory({ messages, onClear, onShowHistory, onNewThread, o
 
       {messages.map((msg, index) => {
         const isAssistant = msg.role === 'assistant';
+        const hasCalendar = msg.calendarIds?.length > 0;
+        const hasEmail = msg.emailIds?.length > 0;
+        const hasLinks = hasCalendar || hasEmail;
 
         return (
           <div
@@ -63,10 +66,12 @@ export function ThreadHistory({ messages, onClear, onShowHistory, onNewThread, o
             style={{ animationDelay: `${index * 50}ms` }}
           >
             <div
+              onClick={() => hasLinks && onMessageClick?.(msg)}
               className={`
                 max-w-[85%] p-3 rounded-2xl backdrop-blur-sm
                 animate-in fade-in slide-in-from-bottom-4 fill-mode-backwards
                 transition-colors
+                ${hasLinks ? 'cursor-pointer' : ''}
                 ${isAssistant
                   ? 'bg-blue-500/10 hover:bg-blue-500/15 border border-blue-500/20 rounded-bl-md'
                   : 'bg-white/5 hover:bg-white/10 border border-white/10 rounded-br-md'
@@ -80,6 +85,14 @@ export function ThreadHistory({ messages, onClear, onShowHistory, onNewThread, o
                 <span className="text-[10px] text-zinc-500 font-mono">
                   {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </span>
+                {/* Calendar indicator */}
+                {hasCalendar && (
+                  <Calendar className="w-3 h-3 text-blue-400" title={`${msg.calendarIds.length} calendar event(s)`} />
+                )}
+                {/* Email indicator */}
+                {hasEmail && (
+                  <Mail className="w-3 h-3 text-green-400" title={`${msg.emailIds.length} email(s)`} />
+                )}
                 {/* Status indicator for user messages */}
                 {!isAssistant && msg.status && (
                   <div

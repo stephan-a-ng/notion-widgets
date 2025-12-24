@@ -58,11 +58,19 @@ function saveActiveThreadId(threadId) {
 }
 
 export function useThreads() {
-  // Local session messages (current conversation)
-  const [sessionMessages, setSessionMessages] = useState(() => loadSessionMessages());
+  // Local session messages (current conversation) - always start fresh on page load
+  const [sessionMessages, setSessionMessages] = useState(() => {
+    // Clear any stale session data on page load
+    saveSessionMessages([]);
+    return [];
+  });
 
-  // Active thread ID for the current conversation (used for API calls)
-  const [activeThreadId, setActiveThreadId] = useState(() => loadActiveThreadId() || generateThreadId());
+  // Active thread ID for the current conversation (used for API calls) - always new on page load
+  const [activeThreadId, setActiveThreadId] = useState(() => {
+    const newThreadId = generateThreadId();
+    saveActiveThreadId(newThreadId);
+    return newThreadId;
+  });
 
   // Airtable history
   const [threads, setThreads] = useState([]);
@@ -156,10 +164,21 @@ export function useThreads() {
             }
 
             const thread = threadMap.get(jobId);
+
+            // Extract Calendar and Email IDs (comma-separated strings from Airtable)
+            const calendarIdsRaw = fields['Calendar IDs'] || '';
+            const emailIdsRaw = fields['Email IDs'] || '';
+
+            // Parse comma-separated strings into arrays
+            const calendarIds = calendarIdsRaw ? calendarIdsRaw.split(',').map(id => id.trim()).filter(Boolean) : [];
+            const emailIds = emailIdsRaw ? emailIdsRaw.split(',').map(id => id.trim()).filter(Boolean) : [];
+
             thread.messages.push({
               recordId: record.id,
               requestText,
               responseText,
+              calendarIds,
+              emailIds,
               createdAt
             });
 
@@ -230,13 +249,17 @@ export function useThreads() {
             id: `${msg.recordId}-request`,
             text: msg.requestText,
             timestamp: msg.createdAt,
-            role: 'user'
+            role: 'user',
+            calendarIds: msg.calendarIds || [],
+            emailIds: msg.emailIds || []
           } : null,
           msg.responseText ? {
             id: `${msg.recordId}-response`,
             text: msg.responseText,
             timestamp: msg.createdAt,
-            role: 'assistant'
+            role: 'assistant',
+            calendarIds: msg.calendarIds || [],
+            emailIds: msg.emailIds || []
           } : null
         ])
         .filter(Boolean)
