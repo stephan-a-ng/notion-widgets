@@ -56,6 +56,8 @@ export default function App() {
     threads,
     currentThreadId,
     messages,
+    hasHistory,
+    addMessage,
     loadThread,
     clearCurrentThread,
     createNewThread,
@@ -110,20 +112,39 @@ export default function App() {
       return;
     }
 
+    // Add user message to local session
+    const userMessage = {
+      id: Date.now(),
+      text: finalText,
+      timestamp: new Date(),
+      role: 'user'
+    };
+    addMessage(userMessage);
     setEditText('');
 
     // Show thinking state while waiting for response
     setMode('thinking');
 
     // Play audio response (waits for Tasklet + ElevenLabs)
-    await playAudioResponse();
+    const responseText = await playAudioResponse();
 
-    // Refresh threads from Airtable to show new conversation
-    refreshThreads();
+    // Add assistant response to local session
+    if (responseText) {
+      const assistantMessage = {
+        id: Date.now() + 1,
+        text: responseText,
+        timestamp: new Date(),
+        role: 'assistant'
+      };
+      addMessage(assistantMessage);
+    }
+
+    // Refresh threads from Airtable to include new conversation
+    setTimeout(() => refreshThreads(), 2000);
 
     // Only go back to idle after response completes
     setMode('idle');
-  }, [isLocked, attemptUnlock, playAudioResponse, refreshThreads]);
+  }, [isLocked, attemptUnlock, playAudioResponse, addMessage, refreshThreads]);
 
   // Handle session end (called by speech recognition)
   const handleSessionEnd = useCallback((transcript, interimTranscript) => {
@@ -288,7 +309,9 @@ export default function App() {
             messages={messages}
             onClear={clearCurrentThread}
             onShowHistory={() => setShowThreadBrowser(true)}
-            hasHistory={threads.length > 0}
+            onNewThread={createNewThread}
+            hasHistory={hasHistory}
+            isViewingHistory={!!currentThreadId}
           />
         )}
       </div>

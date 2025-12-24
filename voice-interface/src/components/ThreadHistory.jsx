@@ -1,40 +1,46 @@
 import React from 'react';
-import { MessageSquare, X, User, Bot, Clock, Plus } from 'lucide-react';
+import { MessageSquare, X, User, Bot, Clock, Plus, ArrowLeft } from 'lucide-react';
 
-export function ThreadHistory({ messages, onClear, onShowHistory, hasHistory }) {
+export function ThreadHistory({ messages, onClear, onShowHistory, onNewThread, hasHistory, isViewingHistory }) {
   return (
     <div className="w-full flex flex-col gap-4 animate-in fade-in slide-in-from-bottom-8 duration-700">
       {/* Thread Controls - Always show */}
       <div className="flex items-center justify-between px-2">
         <div className="flex items-center gap-2 text-zinc-500 text-xs font-bold uppercase tracking-widest">
           <MessageSquare className="w-3 h-3" />
-          {messages.length > 0 ? 'Current Thread' : 'Thread'}
+          {isViewingHistory ? 'Past Conversation' : messages.length > 0 ? 'Current Thread' : 'Thread'}
         </div>
-        <div className="flex items-center gap-2">
-          {hasHistory && (
+        <div className="flex items-center gap-1">
+          {isViewingHistory && (
             <button
-              onClick={onShowHistory}
-              className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-blue-400 transition-colors px-3 py-1.5 rounded-lg hover:bg-white/5"
+              onClick={onClear}
+              className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-white transition-colors px-3 py-1.5 rounded-lg hover:bg-white/5"
             >
-              <Clock className="w-3 h-3" />
-              History
+              <ArrowLeft className="w-3 h-3" />
+              Back
             </button>
           )}
+          <button
+            onClick={onNewThread}
+            className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-green-400 transition-colors px-3 py-1.5 rounded-lg hover:bg-white/5"
+          >
+            <Plus className="w-3 h-3" />
+            New
+          </button>
+          <button
+            onClick={onShowHistory}
+            className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-blue-400 transition-colors px-3 py-1.5 rounded-lg hover:bg-white/5"
+          >
+            <Clock className="w-3 h-3" />
+            History
+          </button>
         </div>
       </div>
 
-      {messages.length === 0 && (
+      {messages.length === 0 && !isViewingHistory && (
         <div className="text-center py-8 text-zinc-600">
           <p className="text-sm">No messages in this thread yet</p>
-          {hasHistory && (
-            <button
-              onClick={onShowHistory}
-              className="mt-3 text-xs text-zinc-500 hover:text-blue-400 transition-colors flex items-center gap-1.5 mx-auto"
-            >
-              <Clock className="w-3 h-3" />
-              View past threads
-            </button>
-          )}
+          <p className="text-xs mt-2 text-zinc-700">Hold anywhere or press space to talk</p>
         </div>
       )}
 
@@ -84,7 +90,7 @@ export function ThreadHistory({ messages, onClear, onShowHistory, hasHistory }) 
         );
       })}
 
-      {messages.length > 0 && (
+      {messages.length > 0 && !isViewingHistory && (
         <div className="flex justify-center mt-4">
           <button
             onClick={onClear}
